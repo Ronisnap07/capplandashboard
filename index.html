@@ -839,7 +839,7 @@ function renderProjection(){
           <div onclick="toggleMonthBreakdown('mb-${p.resId}-${p.metric}-${year}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--bg3);user-select:none" onmouseover="this.style.background='rgba(0,212,255,0.06)'" onmouseout="this.style.background='var(--bg3)'">
             <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:${metricColor};display:flex;align-items:center;gap:6px">
               <span style="width:10px;height:2px;background:${metricColor};display:inline-block"></span>
-              BREAKDOWN BULANAN (LINEAR)
+              BREAKDOWN BULANAN
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               ${avgAcc!=null?`<span style="font-family:'Space Mono',monospace;font-size:11px;color:${avgAccColor}">${avgAcc.toFixed(1)}% avg akurasi</span>`:''}
