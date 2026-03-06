@@ -842,8 +842,8 @@ function renderProjection(){
               BREAKDOWN BULANAN
             </div>
             <div style="display:flex;align-items:center;gap:8px">
-              ${avgAcc!=null?`<span style="font-family:'Space Mono',monospace;font-size:11px;color:${avgAccColor}">${avgAcc.toFixed(1)}% avg akurasi</span>`:''}
-              <span id="arr-mb-${p.resId}-${p.metric}-${year}" style="color:var(--text-dim);font-size:11px;transition:transform .2s;display:inline-block">▶</span>
+              <span style="width:10px;height:2px;background:${metricColor};display:inline-block"></span>
+              Detail
             </div>
           </div>
           <div id="mb-${p.resId}-${p.metric}-${year}" style="display:none;padding:0">
