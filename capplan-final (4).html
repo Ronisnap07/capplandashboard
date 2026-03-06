@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Capacity Planning Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0a0e1a;--bg2:#111827;--bg3:#1a2236;--border:#1e2d45;--accent:#00d4ff;--accent3:#7fff6b;--warn:#ffcc00;--danger:#ff4560;--purple:#b467ff;--orange:#ff6b35;--text:#e2e8f0;--text-dim:#64748b;--text-bright:#f8fafc;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(rgba(0,212,255,.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,212,255,.02) 1px,transparent 1px);background-size:40px 40px;pointer-events:none;}
+#login-screen{position:fixed;inset:0;background:var(--bg);z-index:999;display:flex;align-items:center;justify-content:center;}
+.login-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:36px;width:100%;max-width:360px;text-align:center;}
+.login-logo{font-family:'Space Mono',monospace;font-size:16px;color:var(--accent);letter-spacing:2px;margin-bottom:6px;}
+.login-sub{font-size:12px;color:var(--text-dim);margin-bottom:24px;}
+.login-box input{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:10px 14px;border-radius:6px;font-size:14px;outline:none;margin-bottom:12px;text-align:center;letter-spacing:3px;}
+.login-box input:focus{border-color:var(--accent);}
+.login-err{font-size:12px;color:var(--danger);margin-bottom:10px;min-height:16px;}
+header{position:sticky;top:0;z-index:100;background:rgba(10,14,26,.95);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;}
+.logo{font-family:'Space Mono',monospace;font-size:13px;color:var(--accent);letter-spacing:2px;}
+.logo span{color:var(--text-dim);}
+.hright{display:flex;align-items:center;gap:10px;}
+.badge{font-family:'Space Mono',monospace;font-size:10px;padding:3px 10px;border-radius:20px;border:1px solid;}
+.badge-editor{border-color:var(--purple);color:var(--purple);background:rgba(180,103,255,.08);}
+.badge-view{border-color:var(--accent3);color:var(--accent3);background:rgba(127,255,107,.08);}
+.sync-info{font-size:11px;color:var(--text-dim);font-family:'Space Mono',monospace;}
+.sync-info.syncing{color:var(--warn);}
+.sync-info.synced{color:var(--accent3);}
+.sync-info.error{color:var(--danger);}
+.btn-refresh{font-family:'Space Mono',monospace;font-size:10px;padding:5px 12px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;transition:all .2s;}
+.btn-refresh:hover{border-color:var(--accent);color:var(--accent);}
+nav{display:flex;gap:4px;padding:14px 28px 0;border-bottom:1px solid var(--border);overflow-x:auto;}
+.tab{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:9px 16px;cursor:pointer;color:var(--text-dim);border:1px solid transparent;border-bottom:none;border-radius:4px 4px 0 0;transition:all .2s;background:none;white-space:nowrap;}
+.tab:hover{color:var(--accent);}
+.tab.active{color:var(--accent);background:var(--bg2);border-color:var(--border);border-bottom:1px solid var(--bg2);margin-bottom:-1px;}
+main{padding:24px 28px;max-width:1300px;margin:0 auto;position:relative;z-index:1;}
+.view{display:none;}.view.active{display:block;}
+.sec-title{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+.sec-title::before{content:'';width:14px;height:2px;background:var(--accent);}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;margin-bottom:18px;}
+.form-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px;}
+.fg label{display:block;font-size:10px;font-family:'Space Mono',monospace;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px;}
+.fg input,.fg select{width:100%;background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px 10px;border-radius:5px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color .2s;}
+.fg input:focus,.fg select:focus{border-color:var(--accent);}
+.fg select option{background:var(--bg3);}
+.fg .hint{font-size:10px;color:var(--text-dim);margin-top:3px;}
+.btn{font-family:'Space Mono',monospace;font-size:10px;letter-spacing:1px;text-transform:uppercase;padding:8px 16px;border-radius:5px;border:none;cursor:pointer;transition:all .2s;}
+.btn-primary{background:var(--accent);color:var(--bg);font-weight:700;}
+.btn-primary:hover{background:#00e8ff;box-shadow:0 0 16px rgba(0,212,255,.3);}
+.btn-sec{background:transparent;color:var(--text-dim);border:1px solid var(--border);}
+.btn-sec:hover{border-color:var(--text-dim);color:var(--text);}
+.fmsg{font-size:12px;margin-top:10px;}
+.gauge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:22px;}
+.gauge-card{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;text-align:center;transition:border-color .2s,transform .2s;cursor:pointer;}
+.gauge-card:hover{transform:translateY(-2px);border-color:rgba(0,212,255,.3);}
+.gauge-card.s-ok{border-left:3px solid var(--accent3);}
+.gauge-card.s-warn{border-left:3px solid var(--warn);}
+.gauge-card.s-danger{border-left:3px solid var(--danger);}
+.gauge-card.s-over{border-left:3px solid var(--purple);}
+.gauge-title{font-size:11px;font-family:'Space Mono',monospace;color:var(--text-bright);margin-bottom:2px;font-weight:700;}
+.gauge-sub{font-size:10px;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px;}
+.gauge-wrap{position:relative;width:120px;height:72px;margin:0 auto 6px;}
+.gauge-val{position:absolute;bottom:2px;left:50%;transform:translateX(-50%);font-family:'Space Mono',monospace;font-size:17px;font-weight:700;white-space:nowrap;}
+.gauge-status{font-size:10px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:1px;margin-bottom:3px;}
+.gauge-thr{font-size:10px;color:var(--text-dim);}
+.sum-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-bottom:22px;}
+.sum-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.sum-label{font-size:10px;font-family:'Space Mono',monospace;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;}
+.sum-val{font-size:22px;font-family:'Space Mono',monospace;font-weight:700;line-height:1;margin-bottom:3px;}
+.sum-sub{font-size:11px;color:var(--text-dim);}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px;}
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:16px;}
+.chart-card.full{grid-column:1/-1;}
+.chart-title{font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);letter-spacing:1px;margin-bottom:12px;text-transform:uppercase;}
+.tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:18px;}
+table{width:100%;border-collapse:collapse;font-size:12px;}
+thead th{font-family:'Space Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);padding:9px 12px;text-align:left;background:var(--bg3);border-bottom:1px solid var(--border);}
+tbody tr{border-bottom:1px solid rgba(30,45,69,.4);transition:background .15s;}
+tbody tr:hover{background:rgba(0,212,255,.03);}
+tbody td{padding:8px 12px;}
+.ab{display:inline-block;font-size:9px;font-family:'Space Mono',monospace;padding:2px 7px;border-radius:3px;text-transform:uppercase;}
+.ab-ok{color:var(--accent3);background:rgba(127,255,107,.1);border:1px solid rgba(127,255,107,.3);}
+.ab-warn{color:var(--warn);background:rgba(255,204,0,.1);border:1px solid rgba(255,204,0,.3);}
+.ab-danger{color:var(--danger);background:rgba(255,69,96,.1);border:1px solid rgba(255,69,96,.3);}
+.ab-over{color:var(--purple);background:rgba(180,103,255,.1);border:1px solid rgba(180,103,255,.3);}
+.ab-cluster{color:var(--orange);background:rgba(255,107,53,.1);border:1px solid rgba(255,107,53,.3);}
+.ab-core{color:var(--accent);background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);}
+.ab-support{color:var(--purple);background:rgba(180,103,255,.1);border:1px solid rgba(180,103,255,.3);}
+.act-btn{background:none;border:1px solid var(--border);color:var(--text-dim);padding:3px 8px;border-radius:3px;cursor:pointer;font-size:11px;transition:all .15s;}
+.act-btn:hover{border-color:var(--accent);color:var(--accent);}
+.act-btn.del:hover{border-color:var(--danger);color:var(--danger);}
+.toggle-wrap{display:flex;gap:0;border:1px solid var(--border);border-radius:5px;overflow:hidden;width:fit-content;margin-bottom:14px;}
+.toggle-btn{font-family:'Space Mono',monospace;font-size:10px;padding:6px 14px;border:none;background:transparent;color:var(--text-dim);cursor:pointer;transition:all .2s;letter-spacing:1px;text-transform:uppercase;}
+.toggle-btn.active{background:var(--accent);color:var(--bg);font-weight:700;}
+.detail-back{font-family:'Space Mono',monospace;font-size:10px;color:var(--accent);cursor:pointer;margin-bottom:14px;display:inline-flex;align-items:center;gap:6px;text-transform:uppercase;letter-spacing:1px;}
+.detail-back:hover{text-decoration:underline;}
+.growth-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-bottom:20px;}
+.growth-card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;}
+.growth-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
+.growth-lbl{font-size:11px;color:var(--text-dim);}
+.growth-val{font-family:'Space Mono',monospace;font-size:12px;}
+.util-bar-track{height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:4px;}
+.util-bar-fill{height:100%;border-radius:2px;}
+.thr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;}
+.thr-item{background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:14px;}
+.thr-item label{display:block;font-size:10px;font-family:'Space Mono',monospace;color:var(--text-dim);letter-spacing:1px;margin-bottom:6px;}
+.thr-val{display:flex;align-items:center;gap:8px;}
+.thr-val input{flex:1;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:4px;font-size:13px;font-family:'Space Mono',monospace;outline:none;}
+.thr-val input:focus{border-color:var(--accent);}
+.thr-badge{font-size:11px;font-family:'Space Mono',monospace;padding:5px 9px;border-radius:4px;}
+.proj-res-sel{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;}
+.proj-res-btn{font-family:'Space Mono',monospace;font-size:10px;padding:5px 12px;border-radius:4px;border:1px solid var(--border);background:transparent;color:var(--text-dim);cursor:pointer;transition:all .2s;}
+.proj-res-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(0,212,255,.08);}
+.proj-months{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-top:10px;}
+.proj-month{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:8px;}
+.proj-month label{display:block;font-size:9px;font-family:'Space Mono',monospace;color:var(--text-dim);margin-bottom:4px;text-align:center;}
+.proj-month input{width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:5px 6px;border-radius:3px;font-size:12px;font-family:'Space Mono',monospace;text-align:center;outline:none;}
+.proj-month input:focus{border-color:var(--accent);}
+.empty-state{text-align:center;padding:48px;color:var(--text-dim);}
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+@media(max-width:768px){nav,main{padding-left:14px;padding-right:14px;}.chart-grid{grid-template-columns:1fr;}.chart-card.full{grid-column:1;}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN (hanya muncul di mode editor) -->
+<div id="login-screen" style="display:none;">
+  <div class="login-box">
+    <div class="login-logo">CAPPLAN</div>
+    <div class="login-sub">Editor Access — Masukkan Password</div>
+    <input type="password" id="pwd-input" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <div class="login-err" id="login-err"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">Masuk →</button>
+  </div>
+</div>
+
+<header>
+  <div class="logo">CAPPLAN <span id="header-sub">// Dashboard</span></div>
+  <div class="hright">
+    <span class="sync-info" id="sync-info">Memuat...</span>
+    <button class="btn-refresh" onclick="loadAndRender()">↻ Refresh</button>
+    <span class="badge" id="mode-badge">👁 VIEW ONLY</span>
+  </div>
+</header>
+
+<nav id="main-nav">
+  <!-- ditentukan oleh mode -->
+</nav>
+
+<main id="main-content">
+</main>
+
+<script>
+const API = 'https://script.google.com/macros/s/AKfycbx7qLbW1aELpEny4m7pwt8b8AQniNFdNxae8Qz_38hipvx2OX0S6hIotl2iunJfGXKi7g/exec';
+const EDITOR_PASSWORD = 'capplan2026';
+const DEFAULT_THR = {cluster_cpu:80,cluster_ram:90,storage_core:70,storage_support:80};
+const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+let resources=[],history=[],projections=[],thresholds={...DEFAULT_THR};
+let isEditor = false;
+let currentTab = '';
+let selProjRes=null, selProjMetric=null, histFilterId=null;
+let detailView='list', drillCharts={}, overviewChart=null, growthCharts={};
+
+// ===== INIT =====
+function init(){
+  const params = new URLSearchParams(window.location.search);
+  isEditor = params.get('mode') === 'editor';
+  if(isEditor){
+    document.getElementById('header-sub').textContent = '// Editor';
+    document.getElementById('mode-badge').className = 'badge badge-editor';
+    document.getElementById('mode-badge').textContent = '✏️ EDITOR';
+    document.getElementById('login-screen').style.display = 'flex';
+    buildEditorNav();
+  } else {
+    buildViewerNav();
+    loadAndRender();
+  }
+}
+
+// ===== LOGIN =====
+function doLogin(){
+  const pwd = document.getElementById('pwd-input').value;
+  if(!pwd){ document.getElementById('login-err').textContent='Masukkan password.'; return; }
+  if(pwd !== EDITOR_PASSWORD){ document.getElementById('login-err').textContent='✗ Password salah!'; return; }
+  document.getElementById('login-screen').style.display='none';
+  loadAndRender();
+}
+
+// ===== NAV =====
+function buildViewerNav(){
+  document.getElementById('main-nav').innerHTML = `
+    <button class="tab active" onclick="showTab('overview')">Overview</button>
+    <button class="tab" onclick="showTab('detail')">Detail Resource</button>
+    <button class="tab" onclick="showTab('growth')">Pertumbuhan</button>
+    <button class="tab" onclick="showTab('projection')">Proyeksi & Akurasi</button>`;
+  document.getElementById('main-content').innerHTML = `
+    <div id="tab-overview" class="view active">
+      <div class="sec-title">Status Utilisasi Saat Ini</div>
+      <div class="gauge-grid" id="gauge-grid"></div>
+      <div class="sec-title">Summary</div>
+      <div class="sum-grid" id="sum-grid"></div>
+      <div class="chart-grid"><div class="chart-card full"><div class="chart-title">Utilisasi Aktual — Semua Resource</div><canvas id="chart-overview" height="90"></canvas></div></div>
+    </div>
+    <div id="tab-detail" class="view">
+      <div id="detail-list-view">
+        <div class="sec-title">Resource Detail</div>
+        <div class="toggle-wrap">
+          <button class="toggle-btn active" onclick="setDetailView('list')">List</button>
+          <button class="toggle-btn" onclick="setDetailView('group')">Per Kategori</button>
+        </div>
+        <div id="detail-list-content"></div>
+      </div>
+      <div id="detail-drill-view" style="display:none;"><div class="detail-back" onclick="backToList()">← Kembali</div><div id="drill-content"></div></div>
+    </div>
+    <div id="tab-growth" class="view">
+      <div id="growth-list-view">
+        <div class="sec-title">Pertumbuhan Utilisasi</div>
+        <div id="growth-grid"></div>
+      </div>
+      <div id="growth-drill-view" style="display:none;">
+        <div class="detail-back" onclick="backToGrowth()">← Kembali</div>
+        <div id="growth-drill-content"></div>
+      </div>
+    </div>
+    <div id="tab-projection" class="view">
+      <div class="sec-title">Proyeksi Tahunan & Akurasi Forecasting</div>
+      <div id="proj-content"></div>
+    </div>`;
+  currentTab = 'overview';
+}
+
+function buildEditorNav(){
+  document.getElementById('main-nav').innerHTML = `
+    <button class="tab active" onclick="showTab('e-resources')">Resources</button>
+    <button class="tab" onclick="showTab('e-history')">Update Utilisasi</button>
+    <button class="tab" onclick="showTab('e-projection')">Proyeksi Tahunan</button>
+    <button class="tab" onclick="showTab('e-threshold')">Threshold</button>`;
+  document.getElementById('main-content').innerHTML = `
+    <div id="tab-e-resources" class="view active">
+      <div class="sec-title">Upload Bulk CSV — Resources</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Upload file Excel (.xlsx) dengan kolom: <code style="color:var(--accent);background:var(--bg3);padding:2px 6px;border-radius:3px">type, name, cpuCap, ramCap, storCap, note</code></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-sec" onclick="downloadTemplate('resources')">⬇ Download Template Excel</button>
+        </div>
+        <div class="fg">
+          <label>Pilih File Excel</label>
+          <input type="file" id="csv-resources" accept=".xlsx,.xls" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:5px;width:100%">
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="uploadExcel('resources')">⬆ Upload & Simpan</button>
+        </div>
+        <div class="fmsg" id="csv-res-msg"></div>
+        <div id="csv-res-preview" style="margin-top:12px"></div>
+      </div>
+      <div class="sec-title">Tambah Resource Manual</div>
+      <div class="card">
+        <div class="form-grid">
+          <div class="fg"><label>Tipe Resource *</label><select id="f-type" onchange="onTypeChange()"><option value="cluster">Host Cluster</option><option value="storage_core">Storage Core</option><option value="storage_support">Storage Support</option></select></div>
+          <div class="fg"><label>Nama Resource *</label><input type="text" id="f-name" placeholder="Cth: Cluster-1"></div>
+          <div class="fg" id="grp-cpu"><label>Kapasitas CPU (cores) *</label><input type="number" id="f-cpu" placeholder="128" min="1" step="any"></div>
+          <div class="fg" id="grp-ram"><label>Kapasitas RAM (GB) *</label><input type="number" id="f-ram" placeholder="512" min="1" step="any"></div>
+          <div class="fg" id="grp-stor" style="display:none"><label>Kapasitas Storage (TB) *</label><input type="number" id="f-stor" placeholder="50" min="0.1" step="any"></div>
+          <div class="fg"><label>Keterangan</label><input type="text" id="f-note" placeholder="Opsional"></div>
+        </div>
+        <div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="addResource()">+ Tambahkan</button><button class="btn btn-sec" onclick="clearResForm()">Reset</button></div>
+        <div class="fmsg" id="res-msg"></div>
+      </div>
+      <div class="sec-title">Daftar Resource</div>
+      <div class="tbl-wrap"><div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Nama</th><th>Tipe</th><th>CPU</th><th>RAM</th><th>Storage</th><th>Keterangan</th><th>Aksi</th></tr></thead><tbody id="res-tbody"></tbody></table></div></div>
+    </div>
+    <div id="tab-e-history" class="view">
+      <div class="sec-title">Upload Bulk CSV — Utilisasi</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Upload file Excel (.xlsx) dengan kolom: <code style="color:var(--accent);background:var(--bg3);padding:2px 6px;border-radius:3px">resName, date, label, cpu, ram, stor</code></p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-sec" onclick="downloadTemplate('history')">⬇ Download Template Excel</button>
+        </div>
+        <div class="fg">
+          <label>Pilih File Excel</label>
+          <input type="file" id="csv-history" accept=".xlsx,.xls" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:5px;width:100%">
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="uploadExcel('history')">⬆ Upload & Simpan</button>
+        </div>
+        <div class="fmsg" id="csv-hist-msg"></div>
+        <div id="csv-hist-preview" style="margin-top:12px"></div>
+      </div>
+      <div class="sec-title">Update Utilisasi Manual</div>
+      <div class="card">
+        <div class="form-grid">
+          <div class="fg"><label>Resource *</label><select id="h-res" onchange="onHistResChange()"></select></div>
+          <div class="fg"><label>Tanggal *</label><input type="date" id="h-date"></div>
+          <div class="fg" id="grp-h-cpu"><label>Utilisasi CPU (%)</label><input type="number" id="h-cpu" placeholder="72.5" min="0" max="100" step="0.1"></div>
+          <div class="fg" id="grp-h-ram"><label>Utilisasi RAM (%)</label><input type="number" id="h-ram" placeholder="85.2" min="0" max="100" step="0.1"></div>
+          <div class="fg" id="grp-h-stor" style="display:none"><label>Utilisasi Storage (%)</label><input type="number" id="h-stor" placeholder="65.0" min="0" max="100" step="0.1"></div>
+          <div class="fg"><label>Label Periode</label><input type="text" id="h-label" placeholder="Minggu 1 Jan"><div class="hint">Opsional, untuk label chart</div></div>
+        </div>
+        <div style="display:flex;gap:8px;"><button class="btn btn-primary" onclick="addHistory()">+ Simpan</button><button class="btn btn-sec" onclick="clearHistForm()">Reset</button></div>
+        <div class="fmsg" id="hist-msg"></div>
+      </div>
+      <div class="sec-title">Riwayat Utilisasi</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;" id="hist-filter"></div>
+      <div class="tbl-wrap"><div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Resource</th><th>Tanggal</th><th>Label</th><th>CPU%</th><th>RAM%</th><th>Storage%</th><th>Aksi</th></tr></thead><tbody id="hist-tbody"></tbody></table></div></div>
+    </div>
+    <div id="tab-e-projection" class="view">
+      <div class="sec-title">Upload Bulk CSV — Proyeksi Tahunan</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">Upload file Excel (.xlsx) dengan kolom: <code style="color:var(--accent);background:var(--bg3);padding:2px 6px;border-radius:3px">resName, metric, year, projected</code></p>
+        <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px">Nilai <b>projected</b> dalam satuan absolut: CPU = cores, RAM = GB, Storage = TB</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <button class="btn btn-sec" onclick="downloadTemplate('projections')">⬇ Download Template Excel</button>
+        </div>
+        <div class="fg">
+          <label>Pilih File Excel</label>
+          <input type="file" id="csv-projections" accept=".xlsx,.xls" style="background:var(--bg3);border:1px solid var(--border);color:var(--text);padding:8px;border-radius:5px;width:100%">
+        </div>
+        <div style="margin-top:10px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="uploadExcel('projections')">⬆ Upload & Simpan</button>
+        </div>
+        <div class="fmsg" id="csv-proj-msg"></div>
+        <div id="csv-proj-preview" style="margin-top:12px"></div>
+      </div>
+      <div class="sec-title">Input Proyeksi Manual</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:14px;">Input proyeksi kapasitas yang akan digunakan per tahun dalam satuan <b style="color:var(--accent)">absolut</b> (CPU: cores, RAM: GB, Storage: TB).</p>
+        <div class="form-grid" style="margin-bottom:14px;">
+          <div class="fg"><label>Tahun</label><input type="number" id="proj-year" value="2026" min="2020" max="2035"></div>
+        </div>
+        <div class="proj-res-sel" id="proj-res-sel"></div>
+        <div id="proj-metric-sel" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;"></div>
+        <div id="proj-abs-input" style="display:none;margin-top:10px;">
+          <div id="proj-current-info" style="margin-bottom:12px;padding:12px;background:var(--bg3);border:1px solid var(--border);border-radius:6px;font-size:12px;"></div>
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+            <div class="fg">
+              <label id="proj-abs-label">Nilai Proyeksi (absolut)</label>
+              <input type="number" id="pm-abs" min="0" step="1" placeholder="Contoh: 204">
+              <div class="hint" id="proj-abs-hint">Masukkan nilai dalam cores/GB/TB</div>
+            </div>
+          </div>
+        </div>
+        <div id="proj-list" style="margin-top:16px;"></div>
+        <div style="display:flex;gap:8px;margin-top:16px;"><button class="btn btn-primary" onclick="saveProjection()">💾 Simpan</button><button class="btn btn-sec" onclick="clearProjInputs()">Reset</button></div>
+        <div class="fmsg" id="proj-msg"></div>
+      </div>
+      <div class="sec-title">Daftar Proyeksi Tersimpan</div>
+      <div class="tbl-wrap"><div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Resource</th><th>Metrik</th><th>Tahun</th><th>Nilai Proyeksi</th><th>Kapasitas</th><th>% dari Kapasitas</th><th>Realisasi Aktual</th><th>Akurasi</th><th>Aksi</th></tr></thead><tbody id="proj-tbody"></tbody></table></div></div>
+    </div>
+    <div id="tab-e-threshold" class="view">
+      <div class="sec-title">Threshold Settings</div>
+      <div class="card">
+        <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px;">Threshold default sudah disesuaikan. Ubah sesuai kebutuhan.</p>
+        <div class="thr-grid" id="thr-grid"></div>
+        <div style="margin-top:16px;display:flex;gap:8px;">
+          <button class="btn btn-primary" onclick="saveThresholds()">💾 Simpan</button>
+          <button class="btn btn-sec" onclick="resetThresholds()">Reset Default</button>
+        </div>
+        <div class="fmsg" id="thr-msg"></div>
+      </div>
+    </div>`;
+  currentTab = 'e-resources';
+}
+
+// ===== API =====
+function setSyncInfo(type,text){ const el=document.getElementById('sync-info'); el.className='sync-info '+type; el.textContent=text; }
+
+async function apiCall(action, data){
+  let url = API + '?action=' + action;
+  if(data !== undefined){
+    url += '&pwd=' + encodeURIComponent(EDITOR_PASSWORD);
+    url += '&data=' + encodeURIComponent(JSON.stringify(data));
+  }
+  const res = await fetch(url);
+  return res.json();
+}
+
+async function loadAllData(){
+  const d = await apiCall('getAll');
+  resources   = d.resources   || [];
+  history     = d.history     || [];
+  projections = d.projections || [];
+  if(d.thresholds && d.thresholds.length){
+    thresholds = {...DEFAULT_THR};
+    d.thresholds.forEach(t=>{ if(t.key) thresholds[t.key]=parseFloat(t.value)||DEFAULT_THR[t.key]; });
+  }
+  const now = new Date().toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'});
+  setSyncInfo('synced','Update: '+now);
+}
+
+async function loadAndRender(){
+  setSyncInfo('syncing','Memuat...');
+  try {
+    await loadAllData();
+    renderCurrentTab();
+  } catch(e){ setSyncInfo('error','Gagal memuat'); }
+}
+
+async function syncData(action, data){
+  setSyncInfo('syncing','Menyimpan...');
+  try {
+    const r = await apiCall(action, data);
+    if(r.error) throw new Error(r.error);
+    setSyncInfo('synced','Tersimpan ✓');
+  } catch(e){ setSyncInfo('error','Gagal: '+e.message); }
+}
+
+// ===== HELPERS =====
+function getThr(r){ if(r.type==='cluster') return {cpu:thresholds.cluster_cpu,ram:thresholds.cluster_ram}; if(r.type==='storage_core') return {stor:thresholds.storage_core}; return {stor:thresholds.storage_support}; }
+function getLatest(resId,metric){ const e=history.filter(h=>h.resId==resId&&h[metric]!==''&&h[metric]!=null).sort((a,b)=>String(a.date).localeCompare(String(b.date))); return e.length?parseFloat(e[e.length-1][metric]):null; }
+function statusOf(v,t){ if(v==null) return 'na'; if(v>100) return 'over'; if(v>t) return 'danger'; if(v>t*0.85) return 'warn'; return 'ok'; }
+const SC={ok:'var(--accent3)',warn:'var(--warn)',danger:'var(--danger)',over:'var(--purple)',na:'var(--text-dim)'};
+const SL={ok:'Aman',warn:'Warning',danger:'Kritis',over:'Over Cap',na:'No Data'};
+const SAC={ok:'ab-ok',warn:'ab-warn',danger:'ab-danger',over:'ab-over',na:''};
+function fmsg(id,text,color){ const el=document.getElementById(id); if(!el) return; el.textContent=text; el.style.color=color; setTimeout(()=>el.textContent='',3500); }
+
+// ===== TABS =====
+function showTab(name){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  const tabs=document.querySelectorAll('.tab');
+  const editorTabs=['e-resources','e-history','e-projection','e-threshold'];
+  const viewerTabs=['overview','detail','growth','projection'];
+  const list=isEditor?editorTabs:viewerTabs;
+  const idx=list.indexOf(name);
+  if(idx>=0) tabs[idx].classList.add('active');
+  currentTab=name;
+  renderCurrentTab();
+}
+
+function renderCurrentTab(){
+  if(currentTab==='overview') renderOverview();
+  else if(currentTab==='detail') renderDetailList();
+  else if(currentTab==='growth') renderGrowth();
+  else if(currentTab==='projection') renderProjection();
+  else if(currentTab==='e-resources'){ renderResTable(); }
+  else if(currentTab==='e-history'){ renderHistorySelects(); renderHistFilter(); renderHistTable(); }
+  else if(currentTab==='e-projection') renderProjUI();
+  else if(currentTab==='e-threshold') renderThresholds();
+}
+
+// ===== GAUGE =====
+function drawGauge(id,val,thr,color){
+  const c=document.getElementById(id); if(!c) return;
+  const ctx=c.getContext('2d'); c.width=120; c.height=72;
+  ctx.clearRect(0,0,120,72);
+  const cx=60,cy=70,r=52;
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,2*Math.PI); ctx.strokeStyle='rgba(0,212,255,0.15)'; ctx.lineWidth=10; ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,Math.PI+(thr/100)*Math.PI); ctx.strokeStyle='rgba(255,204,0,0.15)'; ctx.lineWidth=10; ctx.stroke();
+  const pct=Math.min(val??0,120)/100;
+  ctx.beginPath(); ctx.arc(cx,cy,r,Math.PI,Math.PI+pct*Math.PI); ctx.strokeStyle=color; ctx.lineWidth=10; ctx.lineCap='round'; ctx.stroke();
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(Math.PI+(thr/100)*Math.PI);
+  ctx.beginPath(); ctx.moveTo(r-14,0); ctx.lineTo(r+4,0); ctx.strokeStyle='rgba(255,204,0,0.7)'; ctx.lineWidth=2; ctx.stroke();
+  ctx.restore();
+}
+
+// ===== OVERVIEW =====
+function renderOverview(){
+  if(!resources.length){ document.getElementById('gauge-grid').innerHTML=`<div class="empty-state" style="grid-column:1/-1"><p>Belum ada resource. Input di Editor.</p></div>`; return; }
+  let html='';
+  resources.forEach(r=>{
+    const thr=getThr(r);
+    const metrics=r.type==='cluster'?[{m:'cpu',l:'CPU',t:thr.cpu},{m:'ram',l:'RAM',t:thr.ram}]:[{m:'stor',l:r.type==='storage_core'?'Core':'Support',t:thr.stor}];
+    metrics.forEach(({m,l,t})=>{
+      const val=getLatest(r.id,m); const s=statusOf(val,t); const col=SC[s];
+      html+=`<div class="gauge-card s-${s}" onclick="showTab('detail');drillDown(${r.id})">
+        <div class="gauge-title">${r.name}</div><div class="gauge-sub">${l}</div>
+        <div class="gauge-wrap"><canvas id="g-${r.id}-${m}"></canvas><div class="gauge-val" style="color:${col}">${val!=null?val.toFixed(1)+'%':'—'}</div></div>
+        <div class="gauge-status" style="color:${col}">${SL[s]}</div>
+        <div class="gauge-thr">Threshold: ${t}%</div>
+      </div>`;
+    });
+  });
+  document.getElementById('gauge-grid').innerHTML=html;
+  setTimeout(()=>{
+    resources.forEach(r=>{
+      const thr=getThr(r);
+      if(r.type==='cluster'){
+        [{m:'cpu',t:thr.cpu},{m:'ram',t:thr.ram}].forEach(({m,t})=>{ const v=getLatest(r.id,m); drawGauge(`g-${r.id}-${m}`,v,t,SC[statusOf(v,t)]); });
+      } else { const v=getLatest(r.id,'stor'); drawGauge(`g-${r.id}-stor`,v,thr.stor,SC[statusOf(v,thr.stor)]); }
+    });
+  },50);
+  // Summary
+  let total=0,ok=0,warn=0,danger=0;
+  resources.forEach(r=>{ const thr=getThr(r); (r.type==='cluster'?[{m:'cpu',t:thr.cpu},{m:'ram',t:thr.ram}]:[{m:'stor',t:thr.stor}]).forEach(({m,t})=>{ total++; const s=statusOf(getLatest(r.id,m),t); if(s==='ok')ok++; else if(s==='warn')warn++; else if(s==='danger'||s==='over')danger++; }); });
+  document.getElementById('sum-grid').innerHTML=[
+    {l:'Total Metrik',v:total,c:'',s:'dipantau'},{l:'Aman',v:ok,c:'var(--accent3)',s:'metrik'},
+    {l:'Warning',v:warn,c:'var(--warn)',s:'metrik'},{l:'Kritis/Over',v:danger,c:'var(--danger)',s:'metrik'},
+    {l:'Resources',v:resources.length,c:'var(--accent)',s:'terdaftar'},{l:'Data Histori',v:history.length,c:'',s:'entri'},
+  ].map(x=>`<div class="sum-card"><div class="sum-label">${x.l}</div><div class="sum-val" style="color:${x.c||'var(--text-bright)'}">${x.v}</div><div class="sum-sub">${x.s}</div></div>`).join('');
+  // Chart
+  const labels=[],vals=[];
+  resources.forEach(r=>{ const thr=getThr(r); (r.type==='cluster'?[{m:'cpu',l:'CPU'},{m:'ram',l:'RAM'}]:[{m:'stor',l:'Storage'}]).forEach(({m,l})=>{ const v=getLatest(r.id,m); labels.push(`${r.name} ${l}`); vals.push(v??0); }); });
+  if(overviewChart) overviewChart.destroy();
+  overviewChart=new Chart(document.getElementById('chart-overview'),{type:'bar',data:{labels,datasets:[{label:'Utilisasi (%)',data:vals,backgroundColor:'rgba(0,212,255,0.5)',borderColor:'#00d4ff',borderWidth:1,borderRadius:3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2d45'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2d45'},min:0,max:120}}}});
+}
+
+// ===== DETAIL =====
+function setDetailView(v){ detailView=v; document.querySelectorAll('.toggle-btn').forEach((b,i)=>b.classList.toggle('active',i===(v==='list'?0:1))); renderDetailList(); }
+function renderDetailList(){
+  const wrap=document.getElementById('detail-list-content'); if(!wrap) return;
+  if(!resources.length){ wrap.innerHTML=`<div class="empty-state"><p>Belum ada resource.</p></div>`; return; }
+  if(detailView==='list'){
+    wrap.innerHTML=`<div class="tbl-wrap"><div style="overflow-x:auto"><table><thead><tr><th>#</th><th>Resource</th><th>Tipe</th><th>CPU%</th><th>RAM%</th><th>Storage%</th><th>Status</th><th>Aksi</th></tr></thead><tbody>
+    ${resources.map((r,i)=>{ const thr=getThr(r); const cpu=getLatest(r.id,'cpu'),ram=getLatest(r.id,'ram'),stor=getLatest(r.id,'stor'); const sc=statusOf(cpu,thr.cpu),sr=statusOf(ram,thr.ram),ss=statusOf(stor,thr.stor); const worst=r.type==='cluster'?([sc,sr].find(s=>s==='over')||[sc,sr].find(s=>s==='danger')||[sc,sr].find(s=>s==='warn')||'ok'):ss; const tc={cluster:'ab-cluster',storage_core:'ab-core',storage_support:'ab-support'}; const tl={cluster:'Cluster',storage_core:'Storage Core',storage_support:'Storage Support'}; return `<tr><td style="color:var(--text-dim);font-size:10px">${i+1}</td><td><b>${r.name}</b></td><td><span class="ab ${tc[r.type]}">${tl[r.type]}</span></td><td style="font-family:'Space Mono',monospace">${cpu!=null?cpu.toFixed(1)+'%':'—'}</td><td style="font-family:'Space Mono',monospace">${ram!=null?ram.toFixed(1)+'%':'—'}</td><td style="font-family:'Space Mono',monospace">${stor!=null?stor.toFixed(1)+'%':'—'}</td><td><span class="ab ${SAC[worst]}">${SL[worst]}</span></td><td><button class="act-btn" onclick="drillDown(${r.id})">→ Detail</button></td></tr>`; }).join('')}
+    </tbody></table></div></div>`;
+  } else {
+    const types=[{k:'cluster',l:'🖥️ Host Cluster'},{k:'storage_core',l:'💾 Storage Core'},{k:'storage_support',l:'💾 Storage Support'}];
+    wrap.innerHTML=types.map(tp=>{ const res=resources.filter(r=>r.type===tp.k); if(!res.length) return ''; return `<div style="margin-bottom:20px"><div class="sec-title">${tp.l}</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px">${res.map(r=>{ const thr=getThr(r); const metrics=r.type==='cluster'?[{m:'cpu',l:'CPU',t:thr.cpu},{m:'ram',l:'RAM',t:thr.ram}]:[{m:'stor',l:'Storage',t:thr.stor}]; return `<div class="sum-card" style="cursor:pointer" onclick="drillDown(${r.id})"><div style="font-weight:600;margin-bottom:10px">${r.name}</div>${metrics.map(({m,l,t})=>{ const v=getLatest(r.id,m); const s=statusOf(v,t); return `<div style="margin-bottom:7px"><div style="display:flex;justify-content:space-between;font-size:11px"><span style="color:var(--text-dim)">${l}</span><span style="font-family:'Space Mono',monospace;color:${SC[s]}">${v!=null?v.toFixed(1)+'%':'—'}</span></div><div class="util-bar-track"><div class="util-bar-fill" style="width:${v!=null?Math.min(v,100):0}%;background:${SC[s]}"></div></div></div>`; }).join('')}<div style="text-align:right;font-size:10px;color:var(--accent)">→ Detail</div></div>`; }).join('')}</div></div>`; }).join('');
+  }
+}
+
+function drillDown(resId){
+  const r=resources.find(x=>x.id==resId); if(!r) return;
+  const lv=document.getElementById('detail-list-view'); const dv=document.getElementById('detail-drill-view');
+  if(lv) lv.style.display='none'; if(dv) dv.style.display='block';
+  const thr=getThr(r);
+  const metrics=r.type==='cluster'?[{m:'cpu',l:'CPU',t:thr.cpu,c:'var(--orange)'},{m:'ram',l:'RAM',t:thr.ram,c:'var(--purple)'}]:[{m:'stor',l:'Storage',t:thr.stor,c:'var(--accent)'}];
+  const entries=history.filter(h=>h.resId==resId).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  const labels=entries.map(h=>h.label||h.date);
+  let html=`<div style="font-family:'Space Mono',monospace;font-size:14px;color:var(--accent);margin-bottom:14px">${r.name}</div><div class="chart-grid">`;
+  metrics.forEach(({m,l,t,c})=>{ const v=getLatest(resId,m); const s=statusOf(v,t); html+=`<div class="chart-card"><div class="chart-title">${l} — <span style="color:${SC[s]}">${v!=null?v.toFixed(1)+'%':'No Data'} (${SL[s]})</span></div><canvas id="dc-${resId}-${m}" height="160"></canvas></div>`; });
+  html+=`</div><div class="sec-title">Riwayat Data</div><div class="tbl-wrap"><div style="overflow-x:auto"><table><thead><tr><th>Tanggal</th><th>Label</th>${metrics.map(x=>`<th>${x.l}%</th><th>Status</th>`).join('')}</tr></thead><tbody>${[...entries].reverse().map(h=>`<tr><td style="font-family:'Space Mono',monospace;font-size:11px">${h.date}</td><td style="color:var(--text-dim);font-size:11px">${h.label||'—'}</td>${metrics.map(({m,t})=>{ const v=h[m]!==''&&h[m]!=null?parseFloat(h[m]):null; const s=statusOf(v,t); return `<td style="font-family:'Space Mono',monospace">${v!=null?v.toFixed(1)+'%':'—'}</td><td>${v!=null?`<span class="ab ${SAC[s]}">${SL[s]}</span>`:'—'}</td>`; }).join('')}</tr>`).join('')}</tbody></table></div></div>`;
+  document.getElementById('drill-content').innerHTML=html;
+  setTimeout(()=>{ metrics.forEach(({m,l,t,c})=>{ const vals=entries.map(h=>{ const v=h[m]; return v!==''&&v!=null?parseFloat(v):null; }); const cid=`dc-${resId}-${m}`; if(drillCharts[cid]) drillCharts[cid].destroy(); drillCharts[cid]=new Chart(document.getElementById(cid),{type:'line',data:{labels,datasets:[{label:l+' (%)',data:vals,borderColor:'#00d4ff',backgroundColor:'rgba(0,212,255,0.12)',borderWidth:2,tension:.4,pointRadius:3,fill:true,spanGaps:true}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2d45'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2d45'},min:0,max:110}}},plugins:[{id:'thr',afterDraw(chart){ const{ctx,chartArea:{left,right,top,bottom},scales:{y}}=chart; const yp=y.getPixelForValue(t); if(yp<top||yp>bottom) return; ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='rgba(255,204,0,0.5)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();ctx.fillStyle='#ffcc00';ctx.font='9px Space Mono';ctx.fillText('Max '+t+'%',left+4,yp-4);ctx.restore(); }}]}); }); },50);
+}
+function backToList(){ const lv=document.getElementById('detail-list-view'); const dv=document.getElementById('detail-drill-view'); if(lv) lv.style.display=''; if(dv) dv.style.display='none'; Object.values(drillCharts).forEach(c=>c.destroy()); drillCharts={}; }
+
+// ===== GROWTH =====
+function calcGrowth(arr){ const n=arr.length; if(n<2) return {}; const last=arr[n-1]; return {weekly:n>=2?last-arr[n-2]:null,monthly:n>=4?last-arr[n-4]:null,quarterly:n>=12?last-arr[n-12]:null}; }
+function fmtG(v){ if(v==null) return {t:'—',c:'var(--text-dim)'}; return {t:(v>0?'+':'')+v.toFixed(2)+'%',c:v>0?'var(--danger)':v<0?'var(--accent3)':'var(--text-dim)'}; }
+function calcETA(vals,threshold){ if(vals.length<2) return null; const last=vals[vals.length-1]; if(last>=threshold) return 'Sudah melewati threshold'; const diffs=[]; for(let i=1;i<vals.length;i++) diffs.push(vals[i]-vals[i-1]); const avg=diffs.reduce((a,b)=>a+b,0)/diffs.length; if(avg<=0) return 'Tidak ada pertumbuhan'; return `~${Math.ceil((threshold-last)/avg)} periode lagi`; }
+
+function backToGrowth(){
+  const lv=document.getElementById('growth-list-view');
+  const dv=document.getElementById('growth-drill-view');
+  if(lv) lv.style.display='';
+  if(dv) dv.style.display='none';
+  Object.values(growthCharts).forEach(c=>c.destroy());
+  growthCharts={};
+}
+
+function drillGrowth(resId){
+  const r=resources.find(x=>x.id==resId); if(!r) return;
+  const lv=document.getElementById('growth-list-view');
+  const dv=document.getElementById('growth-drill-view');
+  const wrap=document.getElementById('growth-drill-content');
+  if(lv) lv.style.display='none';
+  if(dv) dv.style.display='';
+
+  const metrics=r.type==='cluster'?[{m:'cpu',l:'CPU',c:'#fb923c'},{m:'ram',l:'RAM',c:'#c084fc'}]:[{m:'stor',l:'Storage',c:'#00d4ff'}];
+  const thr=getThr(r);
+  let html=`<div style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:var(--text-bright);margin-bottom:16px">${r.name}</div>`;
+
+  metrics.forEach(({m,l,c})=>{
+    const entries=history.filter(h=>h.resId==resId&&h[m]!==''&&h[m]!=null).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const vals=entries.map(h=>parseFloat(h[m]));
+    const labels=entries.map(h=>h.label||h.date);
+    const thrVal=m==='cpu'?thr.cpu:m==='ram'?thr.ram:thr.stor;
+    const latest=vals.length?vals[vals.length-1]:null;
+    const g=calcGrowth(vals);
+    const w=fmtG(g.weekly),mo=fmtG(g.monthly),q=fmtG(g.quarterly);
+    const eta=thrVal?calcETA(vals,thrVal):null;
+    const cid=`gdr-${resId}-${m}`;
+
+    html+=`<div class="card" style="margin-bottom:16px;border-left:3px solid ${c}">
+      <div style="font-family:'Space Mono',monospace;font-size:12px;font-weight:700;color:${c};margin-bottom:12px">${l}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px">
+        <div style="background:var(--bg3);border-radius:6px;padding:10px">
+          <div style="font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:3px">SAAT INI</div>
+          <div style="font-size:20px;font-family:'Space Mono',monospace;font-weight:700;color:${c}">${latest!=null?latest.toFixed(1)+'%':'—'}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px">
+          <div style="font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:3px">MINGGUAN</div>
+          <div style="font-size:16px;font-family:'Space Mono',monospace;font-weight:700;color:${w.c}">${w.t}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px">
+          <div style="font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:3px">BULANAN</div>
+          <div style="font-size:16px;font-family:'Space Mono',monospace;font-weight:700;color:${mo.c}">${mo.t}</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px">
+          <div style="font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:3px">3 BULANAN</div>
+          <div style="font-size:16px;font-family:'Space Mono',monospace;font-weight:700;color:${q.c}">${q.t}</div>
+        </div>
+        ${thrVal&&eta?`<div style="background:var(--bg3);border-radius:6px;padding:10px;border:1px solid rgba(255,204,0,.25)">
+          <div style="font-size:9px;color:var(--warn);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:3px">ETA THRESHOLD ${thrVal}%</div>
+          <div style="font-size:13px;font-family:'Space Mono',monospace;font-weight:700;color:var(--warn)">${eta}</div>
+        </div>`:''}
+      </div>
+      ${entries.length>1?`<div style="margin-bottom:14px"><canvas id="${cid}" height="150"></canvas></div>`:''}
+      ${entries.length?`
+      <div style="font-size:9px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:8px">RIWAYAT (${entries.length} entri)</div>
+      <div class="tbl-wrap"><div style="overflow-x:auto"><table>
+        <thead><tr><th>Tanggal</th><th>Label</th><th>Utilisasi</th><th>Perubahan</th><th>Status</th></tr></thead>
+        <tbody>${[...entries].reverse().map((h,i,arr)=>{
+          const v=parseFloat(h[m]);
+          const prev=i<arr.length-1?parseFloat(arr[i+1][m]):null;
+          const diff=prev!=null?v-prev:null;
+          const dc=diff==null?'var(--text-dim)':diff>0?'var(--danger)':diff<0?'var(--accent3)':'var(--text-dim)';
+          const s=thrVal?statusOf(v,thrVal):'ok';
+          return `<tr>
+            <td style="font-family:'Space Mono',monospace;font-size:11px">${h.date}</td>
+            <td style="color:var(--text-dim);font-size:11px">${h.label||'—'}</td>
+            <td style="font-family:'Space Mono',monospace;font-size:11px;color:${c}">${v.toFixed(1)}%</td>
+            <td style="font-family:'Space Mono',monospace;font-size:11px;color:${dc}">${diff!=null?(diff>0?'+':'')+diff.toFixed(2)+'%':'—'}</td>
+            <td><span class="ab ${SAC[s]}">${SL[s]}</span></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div></div>`:'<div style="color:var(--text-dim);font-size:11px">Belum ada data histori.</div>'}
+    </div>`;
+  });
+
+  wrap.innerHTML=html;
+
+  // Draw charts
+  setTimeout(()=>{
+    metrics.forEach(({m,l,c})=>{
+      const entries=history.filter(h=>h.resId==resId&&h[m]!==''&&h[m]!=null).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+      if(entries.length<2) return;
+      const cid=`gdr-${resId}-${m}`;
+      const thr=getThr(r);
+      const thrVal=m==='cpu'?thr.cpu:m==='ram'?thr.ram:thr.stor;
+      const cEl=document.getElementById(cid); if(!cEl) return;
+      if(growthCharts[cid]) growthCharts[cid].destroy();
+      growthCharts[cid]=new Chart(cEl,{type:'line',data:{labels:entries.map(h=>h.label||h.date),datasets:[{label:l+' (%)',data:entries.map(h=>parseFloat(h[m])),borderColor:c,backgroundColor:c+'20',borderWidth:2,tension:.4,pointRadius:3,fill:true}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2d45'}},y:{ticks:{color:'#64748b',font:{size:10}},grid:{color:'#1e2d45'},min:0,max:110}}},plugins:[{id:'thr',afterDraw(chart){if(!thrVal)return;const{ctx,chartArea:{left,right,top,bottom},scales:{y}}=chart;const yp=y.getPixelForValue(thrVal);if(yp<top||yp>bottom)return;ctx.save();ctx.setLineDash([5,4]);ctx.strokeStyle='rgba(255,204,0,0.6)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(left,yp);ctx.lineTo(right,yp);ctx.stroke();ctx.fillStyle='#ffcc00';ctx.font='9px Space Mono';ctx.fillText('Threshold '+thrVal+'%',left+4,yp-4);ctx.restore();}}]});
+    });
+  },50);
+}
+
+function renderGrowth(){
+  const gg=document.getElementById('growth-grid'); if(!gg) return;
+  if(!resources.length){ gg.innerHTML=`<div class="empty-state"><p>Belum ada resource.</p></div>`; return; }
+  let html='';
+  resources.forEach(r=>{
+    const metrics=r.type==='cluster'?[{m:'cpu',l:'CPU',c:'#fb923c'},{m:'ram',l:'RAM',c:'#c084fc'}]:[{m:'stor',l:'Storage',c:'#00d4ff'}];
+    const thr=getThr(r);
+    metrics.forEach(({m,l,c})=>{
+      const entries=history.filter(h=>h.resId==r.id&&h[m]!==''&&h[m]!=null).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+      const vals=entries.map(h=>parseFloat(h[m]));
+      const g=calcGrowth(vals);
+      const w=fmtG(g.weekly),mo=fmtG(g.monthly),q=fmtG(g.quarterly);
+      html+=`<div class="growth-card" style="cursor:pointer" onclick="drillGrowth(${r.id})">
+        <div style="font-weight:600;margin-bottom:10px">${r.name} — <span style="color:${c}">${l}</span></div>
+        <div class="growth-row"><span class="growth-lbl">Mingguan</span><span class="growth-val" style="color:${w.c}">${w.t}</span></div>
+        <div class="growth-row"><span class="growth-lbl">Bulanan</span><span class="growth-val" style="color:${mo.c}">${mo.t}</span></div>
+        <div class="growth-row"><span class="growth-lbl">3 Bulanan</span><span class="growth-val" style="color:${q.c}">${q.t}</span></div>
+        <div style="text-align:right;font-size:10px;color:var(--accent);margin-top:8px">→ Detail</div>
+      </div>`;
+    });
+  });
+  gg.innerHTML=`<div class="growth-grid">${html}</div>`;
+}
+
+function toggleMonthBreakdown(id){
+  const el=document.getElementById(id);
+  const arr=document.getElementById('arr-'+id);
+  if(!el) return;
+  const isOpen=el.style.display!=='none';
+  el.style.display=isOpen?'none':'block';
+  if(arr) arr.style.transform=isOpen?'rotate(0deg)':'rotate(90deg)';
+}
+
+// ===== PROJECTION (VIEWER) - ABSOLUTE + ACCURACY + MONTHLY LINEAR =====
+
+// Ambil realisasi absolut untuk bulan tertentu (YYYY-MM)
+function getActualByMonth(resId, metric, yearMonth){
+  const r=resources.find(x=>x.id==resId); if(!r) return null;
+  const cap=getCapacity(r,metric); if(!cap) return null;
+  // Cari semua entri histori di bulan tersebut
+  const entries=history.filter(h=>{
+    if(h.resId!=resId) return false;
+    if(h[metric]===''||h[metric]==null) return false;
+    return String(h.date).startsWith(yearMonth);
+  });
+  if(!entries.length) return null;
+  // Ambil rata-rata utilisasi bulan itu
+  const avg=entries.reduce((s,h)=>s+parseFloat(h[metric]),0)/entries.length;
+  return parseFloat(((avg/100)*cap).toFixed(2));
+}
+
+// Hitung proyeksi linear per bulan
+function calcMonthlyProjections(startVal, endVal, year){
+  const months=[];
+  const MNAMES=['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+  for(let m=0;m<12;m++){
+    const projected=parseFloat((startVal+(endVal-startVal)*((m+1)/12)).toFixed(2));
+    const monthStr=String(m+1).padStart(2,'0');
+    months.push({
+      month: m+1,
+      label: MNAMES[m],
+      yearMonth: `${year}-${monthStr}`,
+      projected
+    });
+  }
+  return months;
+}
+
+function renderProjection(){
+  const wrap=document.getElementById('proj-content'); if(!wrap) return;
+  if(!projections.length){ wrap.innerHTML=`<div class="empty-state"><div style="font-size:32px">📈</div><p>Belum ada data proyeksi.</p></div>`; return; }
+
+  const years=[...new Set(projections.map(p=>p.year))].sort();
+  let html='';
+
+  years.forEach(year=>{
+    const yearProjs=projections.filter(p=>p.year==year);
+    html+=`<div style="margin-bottom:32px"><div class="sec-title">Proyeksi Tahun ${year}</div>`;
+
+    yearProjs.forEach(p=>{
+      const r=resources.find(x=>x.id==p.resId);
+      const cap=r?getCapacity(r,p.metric):null;
+      const unit=getUnit(p.metric);
+      const actual=getActualAbsolute(p.resId,p.metric);
+      const actualPct=getLatest(p.resId,p.metric);
+      const thr=r?getThr(r):{};
+      const thrVal=p.metric==='cpu'?thr.cpu:p.metric==='ram'?thr.ram:thr.stor;
+      const thrAbs=cap&&thrVal?parseFloat(((thrVal/100)*cap).toFixed(2)):null;
+      const projPct=cap&&p.projected?parseFloat(((p.projected/cap)*100).toFixed(1)):null;
+      const metricColor=p.metric==='cpu'?'var(--orange)':p.metric==='ram'?'var(--purple)':'var(--accent)';
+
+      // Akurasi keseluruhan (realisasi terbaru vs proyeksi akhir tahun)
+      let accBadge='', accInfo='—', accColor='var(--text-dim)', accScore=null;
+      if(actual!=null&&p.projected){
+        const err=Math.abs(actual-p.projected)/p.projected*100;
+        accScore=Math.max(0,100-err);
+        const diff=actual-p.projected;
+        accInfo=diff>0?`+${diff.toFixed(2)} ${unit} dari proyeksi`:`${diff.toFixed(2)} ${unit} dari proyeksi`;
+        accColor=accScore>=90?'var(--accent3)':accScore>=80?'var(--warn)':'var(--danger)';
+        accBadge=`<span style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:${accColor};background:${accColor}18;border:1px solid ${accColor}44;padding:3px 10px;border-radius:4px">${accScore.toFixed(1)}% akurat</span>`;
+      } else if(actual==null){ accBadge=`<span class="ab" style="color:var(--text-dim);border-color:var(--border)">Belum ada data</span>`; }
+
+      // Threshold warning
+      let thrWarn='';
+      if(thrAbs!=null&&p.projected){
+        const pctToThr=(p.projected/thrAbs)*100;
+        if(pctToThr>=85&&pctToThr<100) thrWarn=`<div style="margin-top:8px;padding:6px 8px;background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);border-radius:4px;font-size:11px;color:var(--warn)">⚠ Proyeksi mendekati threshold (${pctToThr.toFixed(0)}% dari batas)</div>`;
+        else if(pctToThr>=100) thrWarn=`<div style="margin-top:8px;padding:6px 8px;background:rgba(255,69,96,.08);border:1px solid rgba(255,69,96,.3);border-radius:4px;font-size:11px;color:var(--danger)">✕ Proyeksi MELEBIHI threshold!</div>`;
+      }
+      let realWarn='';
+      if(actual!=null&&thrAbs!=null){
+        const realPctToThr=(actual/thrAbs)*100;
+        if(realPctToThr>=85&&realPctToThr<100) realWarn=`<div style="margin-top:6px;padding:6px 8px;background:rgba(255,107,53,.08);border:1px solid rgba(255,107,53,.3);border-radius:4px;font-size:11px;color:var(--orange)">⚠ Realisasi mendekati threshold — proyeksi perlu direvisi!</div>`;
+        else if(realPctToThr>=100) realWarn=`<div style="margin-top:6px;padding:6px 8px;background:rgba(255,69,96,.12);border:1px solid rgba(255,69,96,.5);border-radius:4px;font-size:11px;color:var(--danger)"><b>✕ Realisasi MELEWATI threshold — capacity planning tidak akurat!</b></div>`;
+      }
+
+      // Hitung proyeksi bulanan linear
+      const startVal=actual!=null?actual:0;
+      const months=calcMonthlyProjections(startVal,p.projected,year);
+
+      // Buat tabel bulanan
+      let monthRows='';
+      let monthAccScores=[];
+      months.forEach(m=>{
+        const actualMonth=getActualByMonth(p.resId,p.metric,m.yearMonth);
+        let mAccScore=null, mAccColor='var(--text-dim)', mActualStr='—', mDiffStr='—';
+        if(actualMonth!=null){
+          const err=Math.abs(actualMonth-m.projected)/m.projected*100;
+          mAccScore=Math.max(0,100-err);
+          mAccColor=mAccScore>=90?'var(--accent3)':mAccScore>=80?'var(--warn)':'var(--danger)';
+          mActualStr=`${actualMonth} ${unit}`;
+          const diff=actualMonth-m.projected;
+          mDiffStr=(diff>0?'+':'')+diff.toFixed(2);
+          monthAccScores.push(mAccScore);
+        }
+        const projPctM=cap?((m.projected/cap)*100).toFixed(1):null;
+        const isThrWarn=thrAbs&&m.projected>=thrAbs*0.85&&m.projected<thrAbs;
+        const isThrOver=thrAbs&&m.projected>=thrAbs;
+        monthRows+=`<tr>
+          <td style="font-family:'Space Mono',monospace;font-size:11px;color:var(--text-dim)">${m.label} ${year}</td>
+          <td style="font-family:'Space Mono',monospace;font-size:11px">
+            <span style="color:var(--purple)">${m.projected} ${unit}</span>
+            ${projPctM?`<span style="color:var(--text-dim);font-size:10px"> (${projPctM}%)</span>`:''}
+            ${isThrOver?`<span style="color:var(--danger);font-size:10px"> ⚠ >Thr</span>`:isThrWarn?`<span style="color:var(--warn);font-size:10px"> ⚠ ~Thr</span>`:''}
+          </td>
+          <td style="font-family:'Space Mono',monospace;font-size:11px;color:var(--accent3)">${mActualStr}</td>
+          <td style="font-family:'Space Mono',monospace;font-size:11px;color:${mAccColor}">${mDiffStr!=='—'?mDiffStr+' '+unit:'—'}</td>
+          <td>
+            ${mAccScore!=null?`
+              <div style="display:flex;align-items:center;gap:6px">
+                <div style="flex:1;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;min-width:60px">
+                  <div style="height:100%;width:${mAccScore}%;background:${mAccColor};border-radius:2px"></div>
+                </div>
+                <span style="font-family:'Space Mono',monospace;font-size:10px;color:${mAccColor};white-space:nowrap">${mAccScore.toFixed(1)}%</span>
+              </div>`:'<span style="font-size:10px;color:var(--text-dim)">Belum ada data</span>'}
+          </td>
+        </tr>`;
+      });
+
+      // Rata-rata akurasi bulan yang sudah ada data
+      const avgAcc=monthAccScores.length?monthAccScores.reduce((a,b)=>a+b,0)/monthAccScores.length:null;
+      const avgAccColor=avgAcc!=null?(avgAcc>=90?'var(--accent3)':avgAcc>=80?'var(--warn)':'var(--danger)'):'var(--text-dim)';
+
+      html+=`<div class="card" style="margin-bottom:14px;border-left:3px solid ${metricColor}">
+        <!-- Header -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-family:'Space Mono',monospace;font-size:13px;color:var(--text-bright)">${r?r.name:'—'} <span style="color:${metricColor}">/ ${p.metric.toUpperCase()}</span></div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:2px">${cap?'Kapasitas: '+cap+' '+unit:'—'}</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            ${avgAcc!=null?`<span style="font-size:11px;color:var(--text-dim)">Rata-rata akurasi:</span><span style="font-family:'Space Mono',monospace;font-size:13px;font-weight:700;color:${avgAccColor};background:${avgAccColor}18;border:1px solid ${avgAccColor}44;padding:3px 10px;border-radius:4px">${avgAcc.toFixed(1)}%</span>`:''}
+            ${accBadge}
+          </div>
+        </div>
+
+        <!-- Summary cards -->
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:12px">
+          <div style="background:var(--bg3);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:4px">TARGET ${year}</div>
+            <div style="font-size:18px;font-family:'Space Mono',monospace;color:var(--purple)">${p.projected} <span style="font-size:11px">${unit}</span></div>
+            ${projPct?`<div style="font-size:11px;color:var(--text-dim)">${projPct}% dari kapasitas</div>`:''}
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:4px">TITIK AWAL (HISTORI)</div>
+            <div style="font-size:18px;font-family:'Space Mono',monospace;color:var(--accent3)">${actual!=null?actual:'—'} <span style="font-size:11px">${actual!=null?unit:''}</span></div>
+            ${actualPct!=null?`<div style="font-size:11px;color:var(--text-dim)">${actualPct.toFixed(1)}% dari kapasitas</div>`:'<div style="font-size:11px;color:var(--text-dim)">Belum ada histori</div>'}
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:4px">THRESHOLD</div>
+            <div style="font-size:18px;font-family:'Space Mono',monospace;color:var(--warn)">${thrAbs!=null?thrAbs:'—'} <span style="font-size:11px">${thrAbs!=null?unit:''}</span></div>
+            ${thrVal?`<div style="font-size:11px;color:var(--text-dim)">${thrVal}% dari kapasitas</div>`:''}
+          </div>
+          <div style="background:var(--bg3);border-radius:6px;padding:10px">
+            <div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px;margin-bottom:4px">KENAIKAN / BULAN</div>
+            <div style="font-size:18px;font-family:'Space Mono',monospace;color:${metricColor}">${parseFloat(((p.projected-startVal)/12).toFixed(2))} <span style="font-size:11px">${unit}</span></div>
+            <div style="font-size:11px;color:var(--text-dim)">linear / bulan</div>
+          </div>
+        </div>
+
+        ${thrWarn}${realWarn}
+
+        <!-- Tabel bulanan accordion -->
+        <div style="margin-top:14px;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+          <div onclick="toggleMonthBreakdown('mb-${p.resId}-${p.metric}-${year}')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;cursor:pointer;background:var(--bg3);user-select:none" onmouseover="this.style.background='rgba(0,212,255,0.06)'" onmouseout="this.style.background='var(--bg3)'">
+            <div style="font-family:'Space Mono',monospace;font-size:9px;letter-spacing:2px;color:${metricColor};display:flex;align-items:center;gap:6px">
+              <span style="width:10px;height:2px;background:${metricColor};display:inline-block"></span>
+              BREAKDOWN BULANAN (LINEAR)
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              ${avgAcc!=null?`<span style="font-family:'Space Mono',monospace;font-size:11px;color:${avgAccColor}">${avgAcc.toFixed(1)}% avg akurasi</span>`:''}
+              <span id="arr-mb-${p.resId}-${p.metric}-${year}" style="color:var(--text-dim);font-size:11px;transition:transform .2s;display:inline-block">▶</span>
+            </div>
+          </div>
+          <div id="mb-${p.resId}-${p.metric}-${year}" style="display:none;padding:0">
+            <div style="overflow-x:auto">
+              <table>
+                <thead><tr>
+                  <th>Bulan</th>
+                  <th>Proyeksi Linear</th>
+                  <th>Realisasi Aktual</th>
+                  <th>Selisih</th>
+                  <th>Akurasi</th>
+                </tr></thead>
+                <tbody>${monthRows}</tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    });
+
+    html+=`</div>`;
+  });
+
+  wrap.innerHTML=html;
+}
+
+// ===== EDITOR: RESOURCES =====
+function onTypeChange(){ const t=document.getElementById('f-type').value; document.getElementById('grp-cpu').style.display=t==='cluster'?'':'none'; document.getElementById('grp-ram').style.display=t==='cluster'?'':'none'; document.getElementById('grp-stor').style.display=t!=='cluster'?'':'none'; }
+async function addResource(){
+  const t=document.getElementById('f-type').value; const name=document.getElementById('f-name').value.trim();
+  if(!name) return fmsg('res-msg','✗ Nama wajib diisi.','var(--danger)');
+  let r={id:Date.now(),type:t,name,note:document.getElementById('f-note').value};
+  if(t==='cluster'){ const cpu=parseFloat(document.getElementById('f-cpu').value),ram=parseFloat(document.getElementById('f-ram').value); if(!cpu||cpu<=0) return fmsg('res-msg','✗ Kapasitas CPU wajib diisi.','var(--danger)'); if(!ram||ram<=0) return fmsg('res-msg','✗ Kapasitas RAM wajib diisi.','var(--danger)'); r.cpuCap=cpu; r.ramCap=ram; }
+  else { const stor=parseFloat(document.getElementById('f-stor').value); if(!stor||stor<=0) return fmsg('res-msg','✗ Kapasitas Storage wajib diisi.','var(--danger)'); r.storCap=stor; }
+  resources.push(r); await syncData('saveResources',resources); renderResTable(); clearResForm();
+  fmsg('res-msg',`✓ Resource "${name}" berhasil ditambahkan!`,'var(--accent3)');
+}
+async function delRes(id){ if(!confirm('Hapus resource ini?')) return; resources=resources.filter(r=>r.id!=id); history=history.filter(h=>h.resId!=id); projections=projections.filter(p=>p.resId!=id); await syncData('saveResources',resources); await syncData('saveHistory',history); await syncData('saveProjections',projections); renderResTable(); }
+function renderResTable(){
+  const tbody=document.getElementById('res-tbody'); if(!tbody) return;
+  if(!resources.length){ tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--text-dim)">Belum ada resource.</td></tr>`; return; }
+  const tl={cluster:'Host Cluster',storage_core:'Storage Core',storage_support:'Storage Support'}; const tc={cluster:'ab-cluster',storage_core:'ab-core',storage_support:'ab-support'};
+  tbody.innerHTML=resources.map((r,i)=>`<tr><td style="color:var(--text-dim);font-size:10px">${i+1}</td><td><b>${r.name}</b></td><td><span class="ab ${tc[r.type]}">${tl[r.type]}</span></td><td>${r.cpuCap?r.cpuCap+' cores':'—'}</td><td>${r.ramCap?r.ramCap+' GB':'—'}</td><td>${r.storCap?r.storCap+' TB':'—'}</td><td style="color:var(--text-dim)">${r.note||'—'}</td><td><button class="act-btn del" onclick="delRes(${r.id})">✕</button></td></tr>`).join('');
+}
+function clearResForm(){ ['f-name','f-cpu','f-ram','f-stor','f-note'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); }
+
+// ===== EDITOR: HISTORY =====
+function renderHistorySelects(){ const sel=document.getElementById('h-res'); if(!sel) return; sel.innerHTML=resources.map(r=>`<option value="${r.id}">${r.name}</option>`).join(''); onHistResChange(); if(!document.getElementById('h-date').value) document.getElementById('h-date').valueAsDate=new Date(); }
+function onHistResChange(){ const id=document.getElementById('h-res')?.value; const r=resources.find(x=>x.id==id); if(!r) return; document.getElementById('grp-h-cpu').style.display=r.type==='cluster'?'':'none'; document.getElementById('grp-h-ram').style.display=r.type==='cluster'?'':'none'; document.getElementById('grp-h-stor').style.display=r.type!=='cluster'?'':'none'; }
+async function addHistory(){
+  const resId=document.getElementById('h-res').value; const r=resources.find(x=>x.id==resId); if(!r) return fmsg('hist-msg','✗ Pilih resource.','var(--danger)');
+  const date=document.getElementById('h-date').value; if(!date) return fmsg('hist-msg','✗ Tanggal wajib diisi.','var(--danger)');
+  let entry={id:Date.now(),resId:r.id,resName:r.name,date,label:document.getElementById('h-label').value.trim()};
+  if(r.type==='cluster'){ const cpu=parseFloat(document.getElementById('h-cpu').value),ram=parseFloat(document.getElementById('h-ram').value); if(isNaN(cpu)&&isNaN(ram)) return fmsg('hist-msg','✗ Isi minimal CPU atau RAM.','var(--danger)'); entry.cpu=isNaN(cpu)?'':cpu; entry.ram=isNaN(ram)?'':ram; entry.stor=''; }
+  else { const stor=parseFloat(document.getElementById('h-stor').value); if(isNaN(stor)) return fmsg('hist-msg','✗ Isi utilisasi storage.','var(--danger)'); entry.cpu=''; entry.ram=''; entry.stor=stor; }
+  history.push(entry); history.sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+  await syncData('saveHistory',history); renderHistTable(); fmsg('hist-msg','✓ Data berhasil disimpan!','var(--accent3)');
+}
+function renderHistFilter(){ const wrap=document.getElementById('hist-filter'); if(!wrap) return; wrap.innerHTML=`<button class="btn ${histFilterId===null?'btn-primary':'btn-sec'}" onclick="setHistFilter(null)">Semua</button>`+resources.map(r=>`<button class="btn ${histFilterId==r.id?'btn-primary':'btn-sec'}" onclick="setHistFilter(${r.id})">${r.name}</button>`).join(''); }
+function setHistFilter(id){ histFilterId=id; renderHistFilter(); renderHistTable(); }
+function renderHistTable(){ const tbody=document.getElementById('hist-tbody'); if(!tbody) return; const data=histFilterId!==null?history.filter(h=>h.resId==histFilterId):[...history]; const sorted=[...data].reverse(); if(!sorted.length){ tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;padding:20px;color:var(--text-dim)">Belum ada riwayat.</td></tr>`; return; } tbody.innerHTML=sorted.map((h,i)=>`<tr><td style="color:var(--text-dim);font-size:10px">${i+1}</td><td>${h.resName||'—'}</td><td style="font-family:'Space Mono',monospace;font-size:11px">${h.date}</td><td style="color:var(--text-dim);font-size:11px">${h.label||'—'}</td><td>${h.cpu!==''&&h.cpu!=null?h.cpu+'%':'—'}</td><td>${h.ram!==''&&h.ram!=null?h.ram+'%':'—'}</td><td>${h.stor!==''&&h.stor!=null?h.stor+'%':'—'}</td><td><button class="act-btn del" onclick="delHist(${h.id})">✕</button></td></tr>`).join(''); }
+async function delHist(id){ if(!confirm('Hapus?')) return; history=history.filter(h=>h.id!=id); await syncData('saveHistory',history); renderHistTable(); }
+function clearHistForm(){ ['h-cpu','h-ram','h-stor','h-label'].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; }); }
+
+// ===== EDITOR: PROJECTION (ABSOLUTE VALUES PER YEAR) =====
+function getCapacity(r, metric){
+  if(metric==='cpu') return r.cpuCap||null;
+  if(metric==='ram') return r.ramCap||null;
+  if(metric==='stor') return r.storCap||null;
+  return null;
+}
+function getUnit(metric){ return metric==='cpu'?'cores':metric==='ram'?'GB':'TB'; }
+function getActualAbsolute(resId, metric){
+  // Ambil utilisasi % terbaru, konversi ke nilai absolut pakai kapasitas resource
+  const r=resources.find(x=>x.id==resId); if(!r) return null;
+  const cap=getCapacity(r,metric); if(!cap) return null;
+  const latestPct=getLatest(resId,metric); if(latestPct==null) return null;
+  return parseFloat(((latestPct/100)*cap).toFixed(2));
+}
+
+function renderProjUI(){
+  const sel=document.getElementById('proj-res-sel'); if(!sel) return;
+  sel.innerHTML=resources.map(r=>`<button class="proj-res-btn ${selProjRes==r.id?'active':''}" onclick="selectProjRes(${r.id})">${r.name}</button>`).join('');
+  renderProjMetrics();
+  renderProjAbsInput();
+  renderProjTable();
+}
+function selectProjRes(id){ selProjRes=id; selProjMetric=null; renderProjUI(); }
+function renderProjMetrics(){
+  const wrap=document.getElementById('proj-metric-sel'); if(!wrap) return;
+  if(!selProjRes){ wrap.innerHTML=''; return; }
+  const r=resources.find(x=>x.id==selProjRes);
+  const metrics=r&&r.type==='cluster'?[{k:'cpu',l:'CPU (cores)'},{k:'ram',l:'RAM (GB)'}]:[{k:'stor',l:'Storage (TB)'}];
+  wrap.innerHTML=metrics.map(m=>`<button class="proj-res-btn ${selProjMetric===m.k?'active':''}" onclick="selectProjMetric('${m.k}')">${m.l}</button>`).join('');
+}
+function selectProjMetric(k){ selProjMetric=k; renderProjAbsInput(); }
+function renderProjAbsInput(){
+  const wrap=document.getElementById('proj-abs-input'); if(!wrap) return;
+  if(!selProjRes||!selProjMetric){ wrap.style.display='none'; return; }
+  const r=resources.find(x=>x.id==selProjRes);
+  const year=parseInt(document.getElementById('proj-year').value)||2026;
+  const cap=getCapacity(r,selProjMetric);
+  const unit=getUnit(selProjMetric);
+  const actual=getActualAbsolute(selProjRes,selProjMetric);
+  const actualPct=getLatest(selProjRes,selProjMetric);
+  const existing=projections.find(p=>p.resId==selProjRes&&p.metric===selProjMetric&&p.year==year);
+  const thr=getThr(r);
+  const thrVal=selProjMetric==='cpu'?thr.cpu:selProjMetric==='ram'?thr.ram:thr.stor;
+  const thrAbs=cap&&thrVal?parseFloat(((thrVal/100)*cap).toFixed(2)):null;
+
+  document.getElementById('proj-abs-label').textContent=`Nilai Proyeksi ${year} (${unit})`;
+  document.getElementById('proj-abs-hint').textContent=`Masukkan dalam ${unit}. Kapasitas total: ${cap?cap+' '+unit:'—'}${thrAbs?' | Batas threshold: '+thrAbs+' '+unit:''}`;
+  document.getElementById('pm-abs').value=existing?existing.projected:'';
+  document.getElementById('pm-abs').placeholder=actual?`Realisasi saat ini: ${actual} ${unit}`:`Contoh: ${cap?Math.round(cap*0.6):'200'} ${unit}`;
+
+  let infoHtml=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">`;
+  infoHtml+=`<div><div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px">KAPASITAS TOTAL</div><div style="font-size:16px;font-family:'Space Mono',monospace;color:var(--accent)">${cap?cap+' '+unit:'—'}</div></div>`;
+  infoHtml+=`<div><div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px">REALISASI SAAT INI</div><div style="font-size:16px;font-family:'Space Mono',monospace;color:var(--accent3)">${actual?actual+' '+unit:'—'}${actualPct!=null?' ('+actualPct.toFixed(1)+'%)':''}</div></div>`;
+  infoHtml+=`<div><div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px">BATAS THRESHOLD</div><div style="font-size:16px;font-family:'Space Mono',monospace;color:var(--warn)">${thrAbs?thrAbs+' '+unit+' ('+thrVal+'%)':'—'}</div></div>`;
+  if(existing){ infoHtml+=`<div><div style="font-size:10px;color:var(--text-dim);font-family:'Space Mono',monospace;letter-spacing:1px">PROYEKSI ${year} TERSIMPAN</div><div style="font-size:16px;font-family:'Space Mono',monospace;color:var(--purple)">${existing.projected} ${unit}</div></div>`; }
+  infoHtml+=`</div>`;
+  document.getElementById('proj-current-info').innerHTML=infoHtml;
+  wrap.style.display='block';
+}
+
+function renderProjTable(){
+  const tbody=document.getElementById('proj-tbody'); if(!tbody) return;
+  if(!projections.length){ tbody.innerHTML=`<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--text-dim)">Belum ada proyeksi.</td></tr>`; return; }
+  const rows=projections.map((p,i)=>{
+    const r=resources.find(x=>x.id==p.resId);
+    const cap=r?getCapacity(r,p.metric):null;
+    const unit=getUnit(p.metric);
+    const actual=getActualAbsolute(p.resId,p.metric);
+    const thr=r?getThr(r):{};
+    const thrVal=p.metric==='cpu'?thr.cpu:p.metric==='ram'?thr.ram:thr.stor;
+    const thrAbs=cap&&thrVal?((thrVal/100)*cap):null;
+    const projPct=cap&&p.projected?((p.projected/cap)*100).toFixed(1):null;
+    // Akurasi: hanya bisa dihitung jika ada realisasi
+    let acc='—'; let accColor='var(--text-dim)';
+    if(actual!=null&&p.projected){
+      const err=Math.abs(actual-p.projected)/p.projected*100;
+      acc=err.toFixed(1)+'%';
+      accColor=err<=10?'var(--accent3)':err<=20?'var(--warn)':'var(--danger)';
+    }
+    // Warning jika realisasi mendekati threshold
+    let warnHtml='';
+    if(actual!=null&&thrAbs!=null){
+      const pctToThr=(actual/thrAbs)*100;
+      if(pctToThr>=85&&pctToThr<100) warnHtml=`<span class="ab ab-warn" style="margin-left:4px">⚠ Mendekati</span>`;
+      else if(pctToThr>=100) warnHtml=`<span class="ab ab-danger" style="margin-left:4px">✕ Melebihi</span>`;
+    }
+    return `<tr>
+      <td style="color:var(--text-dim);font-size:10px">${i+1}</td>
+      <td><b>${p.resName||'—'}</b></td>
+      <td><span style="font-family:'Space Mono',monospace;font-size:11px">${p.metric.toUpperCase()}</span></td>
+      <td style="font-family:'Space Mono',monospace">${p.year}</td>
+      <td style="font-family:'Space Mono',monospace;color:var(--purple)">${p.projected} ${unit}</td>
+      <td style="font-family:'Space Mono',monospace;color:var(--text-dim)">${cap?cap+' '+unit:'—'}</td>
+      <td style="font-family:'Space Mono',monospace">${projPct?projPct+'%':'—'}</td>
+      <td style="font-family:'Space Mono',monospace;color:var(--accent3)">${actual!=null?actual+' '+unit:'—'}${warnHtml}</td>
+      <td style="font-family:'Space Mono',monospace;color:${accColor}">${acc}</td>
+      <td><button class="act-btn del" onclick="delProj(${p.id})">✕</button></td>
+    </tr>`;
+  }).join('');
+  tbody.innerHTML=rows;
+}
+
+async function saveProjection(){
+  if(!selProjRes||!selProjMetric) return fmsg('proj-msg','✗ Pilih resource dan metrik.','var(--danger)');
+  const year=parseInt(document.getElementById('proj-year').value)||2026;
+  const absVal=parseFloat(document.getElementById('pm-abs').value);
+  if(isNaN(absVal)||absVal<=0) return fmsg('proj-msg','✗ Nilai proyeksi harus lebih dari 0.','var(--danger)');
+  const r=resources.find(x=>x.id==selProjRes);
+  // Warning jika proyeksi melebihi kapasitas
+  const cap=getCapacity(r,selProjMetric);
+  if(cap&&absVal>cap) return fmsg('proj-msg',`✗ Nilai proyeksi (${absVal}) melebihi kapasitas total (${cap}).`,'var(--danger)');
+  const idx=projections.findIndex(p=>p.resId==selProjRes&&p.metric===selProjMetric&&p.year==year);
+  const entry={id:idx>=0?projections[idx].id:Date.now(),resId:selProjRes,resName:r?r.name:'',metric:selProjMetric,year,projected:absVal};
+  if(idx>=0) projections[idx]=entry; else projections.push(entry);
+  await syncData('saveProjections',projections);
+  fmsg('proj-msg','✓ Proyeksi berhasil disimpan!','var(--accent3)');
+  renderProjTable();
+  renderProjAbsInput();
+}
+function clearProjInputs(){ const el=document.getElementById('pm-abs'); if(el) el.value=''; }
+async function delProj(id){ if(!confirm('Hapus proyeksi ini?')) return; projections=projections.filter(p=>p.id!=id); await syncData('saveProjections',projections); renderProjTable(); }
+
+// ===== EDITOR: THRESHOLD =====
+const THR_META=[{key:'cluster_cpu',label:'CPU (Host Cluster)',color:'var(--orange)'},{key:'cluster_ram',label:'RAM (Host Cluster)',color:'var(--purple)'},{key:'storage_core',label:'Storage Core',color:'var(--accent)'},{key:'storage_support',label:'Storage Support',color:'var(--accent3)'}];
+function renderThresholds(){ const g=document.getElementById('thr-grid'); if(!g) return; g.innerHTML=THR_META.map(m=>`<div class="thr-item"><label>${m.label}</label><div class="thr-val"><input type="number" id="thr-${m.key}" value="${thresholds[m.key]}" min="1" max="100"><span class="thr-badge" id="thr-b-${m.key}" style="color:${m.color};background:${m.color}22;border:1px solid ${m.color}44">${thresholds[m.key]}%</span></div></div>`).join(''); THR_META.forEach(m=>{ document.getElementById('thr-'+m.key).addEventListener('input',function(){ document.getElementById('thr-b-'+m.key).textContent=this.value+'%'; }); }); }
+async function saveThresholds(){ THR_META.forEach(m=>{ thresholds[m.key]=parseFloat(document.getElementById('thr-'+m.key).value)||DEFAULT_THR[m.key]; }); const data=Object.entries(thresholds).map(([key,value])=>({key,value})); await syncData('saveThresholds',data); renderThresholds(); fmsg('thr-msg','✓ Threshold disimpan!','var(--accent3)'); }
+function resetThresholds(){ thresholds={...DEFAULT_THR}; const data=Object.entries(thresholds).map(([key,value])=>({key,value})); syncData('saveThresholds',data); renderThresholds(); fmsg('thr-msg','✓ Direset ke default.','var(--warn)'); }
+
+// ===== EXCEL BULK UPLOAD =====
+// Load SheetJS
+const sheetScript = document.createElement('script');
+sheetScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+document.head.appendChild(sheetScript);
+
+const EXCEL_TEMPLATES = {
+  resources: {
+    headers: ['type','name','cpuCap','ramCap','storCap','note'],
+    rows: [
+      ['cluster','Cluster-1',128,512,'','Cluster produksi'],
+      ['cluster','Cluster-2',64,256,'','Cluster staging'],
+      ['storage_core','SAN-Core-A','','',50,'Storage core aplikasi'],
+      ['storage_support','SAN-Support-A','','',30,'Storage support'],
+    ],
+    notes: [
+      '* type: cluster / storage_core / storage_support',
+      '* cpuCap & ramCap diisi untuk cluster, storCap untuk storage',
+      '* storCap dalam TB, ramCap dalam GB, cpuCap dalam cores',
+    ]
+  },
+  history: {
+    headers: ['resName','date','label','cpu','ram','stor'],
+    rows: [
+      ['Cluster-1','2025-01-06','Minggu 1 Jan',65.5,78.2,''],
+      ['Cluster-1','2025-01-13','Minggu 2 Jan',67.1,80.0,''],
+      ['SAN-Core-A','2025-01-06','Minggu 1 Jan','','',55.3],
+    ],
+    notes: [
+      '* resName harus sama persis dengan nama resource yang sudah ada',
+      '* date format: YYYY-MM-DD (contoh: 2025-01-06)',
+      '* cpu & ram diisi untuk cluster, stor untuk storage',
+      '* Kosongkan kolom yang tidak berlaku (jangan dihapus kolomnya)',
+    ]
+  },
+  projections: {
+    headers: ['resName','metric','year','projected'],
+    rows: [
+      ['Cluster-1','cpu',2026,204],
+      ['Cluster-1','ram',2026,380],
+      ['SAN-Core-A','stor',2026,35],
+    ],
+    notes: [
+      '* resName harus sama persis dengan nama resource yang sudah ada',
+      '* metric: cpu / ram / stor',
+      '* year: tahun proyeksi (contoh: 2026)',
+      '* projected: nilai ABSOLUT yang diproyeksikan akan digunakan',
+      '  - CPU dalam cores (contoh: 204 artinya 204 cores)',
+      '  - RAM dalam GB (contoh: 380 artinya 380 GB)',
+      '  - Storage dalam TB (contoh: 35 artinya 35 TB)',
+      '* Nilai projected HARUS lebih kecil dari kapasitas total resource',
+    ]
+  }
+};
+
+function downloadTemplate(type) {
+  const tmpl = EXCEL_TEMPLATES[type];
+  const wb = XLSX.utils.book_new();
+
+  // Sheet data
+  const wsData = [tmpl.headers, ...tmpl.rows];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+  // Style header (lebar kolom otomatis)
+  const colWidths = tmpl.headers.map((h,i) => ({
+    wch: Math.max(h.length, ...tmpl.rows.map(r => String(r[i]||'').length)) + 4
+  }));
+  ws['!cols'] = colWidths;
+
+  // Sheet panduan
+  const notesData = [['PANDUAN PENGISIAN'], ...tmpl.notes.map(n=>[n]), [''], ['Hapus baris contoh ini sebelum upload!']];
+  const wsNotes = XLSX.utils.aoa_to_sheet(notesData);
+  wsNotes['!cols'] = [{wch: 60}];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Data');
+  XLSX.utils.book_append_sheet(wb, wsNotes, 'Panduan');
+
+  XLSX.writeFile(wb, `template_${type}.xlsx`);
+}
+
+function excelDateToString(val) {
+  // Konversi angka serial Excel ke string tanggal YYYY-MM-DD
+  if (typeof val === 'number') {
+    const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+    const y = date.getUTCFullYear();
+    const m = String(date.getUTCMonth()+1).padStart(2,'0');
+    const d = String(date.getUTCDate()).padStart(2,'0');
+    return `${y}-${m}-${d}`;
+  }
+  if (typeof val === 'string') return val.trim();
+  return '';
+}
+
+function renderPreview(containerId, rows, columns) {
+  if (!rows.length) return;
+  const wrap = document.getElementById(containerId);
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div style="font-size:11px;color:var(--accent3);margin-bottom:6px;font-family:'Space Mono',monospace">${rows.length} baris terdeteksi — Preview 5 baris pertama:</div>
+    <div style="overflow-x:auto"><table>
+      <thead><tr>${columns.map(c=>`<th>${c}</th>`).join('')}</tr></thead>
+      <tbody>${rows.slice(0,5).map(r=>`<tr>${columns.map(c=>`<td style="font-size:11px">${r[c]!==undefined&&r[c]!==''?r[c]:'—'}</td>`).join('')}</tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
+async function uploadExcel(type) {
+  const fileInput = document.getElementById(`csv-${type}`);
+  const msgId = type==='resources'?'csv-res-msg':type==='history'?'csv-hist-msg':'csv-proj-msg';
+  const previewId = type==='resources'?'csv-res-preview':type==='history'?'csv-hist-preview':'csv-proj-preview';
+
+  if (!fileInput.files.length) return fmsg(msgId,'✗ Pilih file Excel terlebih dahulu.','var(--danger)');
+  if (typeof XLSX === 'undefined') return fmsg(msgId,'✗ Library Excel belum siap, coba lagi.','var(--danger)');
+
+  const buf = await fileInput.files[0].arrayBuffer();
+  const wb = XLSX.read(buf, {type:'array', cellDates:false});
+
+  // Ambil sheet pertama (sheet Data)
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const raw = XLSX.utils.sheet_to_json(ws, {defval:''});
+
+  if (!raw.length) return fmsg(msgId,'✗ File Excel kosong atau format tidak valid.','var(--danger)');
+
+  // Normalize keys ke lowercase
+  const rows = raw.map(r => {
+    const obj = {};
+    Object.keys(r).forEach(k => { obj[k.toLowerCase().trim()] = r[k]; });
+    return obj;
+  });
+
+  if (type === 'resources') {
+    renderPreview(previewId, rows, ['type','name','cpucap','ramcap','storcap','note']);
+    const newRes = rows.map(r => ({
+      id: Date.now() + Math.random(),
+      type: String(r.type||'').trim(),
+      name: String(r.name||'').trim(),
+      cpuCap: r.cpucap !== '' ? parseFloat(r.cpucap) : '',
+      ramCap: r.ramcap !== '' ? parseFloat(r.ramcap) : '',
+      storCap: r.storcap !== '' ? parseFloat(r.storcap) : '',
+      note: String(r.note||'').trim()
+    })).filter(r => r.name && r.type);
+    if (!newRes.length) return fmsg(msgId,'✗ Tidak ada data valid. Pastikan kolom type dan name terisi.','var(--danger)');
+    resources = [...resources, ...newRes];
+    await syncData('saveResources', resources);
+    renderResTable();
+    fmsg(msgId, `✓ ${newRes.length} resource berhasil diimport!`, 'var(--accent3)');
+  }
+
+  else if (type === 'history') {
+    renderPreview(previewId, rows, ['resname','date','label','cpu','ram','stor']);
+    const newHist = rows.map(r => {
+      const res = resources.find(x => x.name.toLowerCase() === String(r.resname||'').toLowerCase().trim());
+      if (!res) return null;
+      return {
+        id: Date.now() + Math.random(),
+        resId: res.id, resName: res.name,
+        date: excelDateToString(r.date),
+        label: String(r.label||'').trim(),
+        cpu: r.cpu !== '' && r.cpu != null ? parseFloat(r.cpu) : '',
+        ram: r.ram !== '' && r.ram != null ? parseFloat(r.ram) : '',
+        stor: r.stor !== '' && r.stor != null ? parseFloat(r.stor) : '',
+      };
+    }).filter(r => r && r.date);
+    if (!newHist.length) return fmsg(msgId,'✗ Tidak ada data valid. Pastikan resName sesuai nama resource yang sudah ada.','var(--danger)');
+    history = [...history, ...newHist].sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    await syncData('saveHistory', history);
+    renderHistTable();
+    fmsg(msgId, `✓ ${newHist.length} data utilisasi berhasil diimport!`, 'var(--accent3)');
+  }
+
+  else if (type === 'projections') {
+    renderPreview(previewId, rows, ['resname','metric','year','projected']);
+    const newProj = rows.map(r => {
+      const res = resources.find(x => x.name.toLowerCase() === String(r.resname||'').toLowerCase().trim());
+      if (!res) return null;
+      const projVal = parseFloat(r.projected);
+      if (isNaN(projVal) || projVal <= 0) return null;
+      return {
+        id: Date.now() + Math.random(),
+        resId: res.id, resName: res.name,
+        metric: String(r.metric||'cpu').trim(),
+        year: parseInt(r.year)||2026,
+        projected: projVal
+      };
+    }).filter(r => r);
+    if (!newProj.length) return fmsg(msgId,'✗ Tidak ada data valid. Pastikan resName sesuai nama resource yang sudah ada dan kolom projected terisi.','var(--danger)');
+    newProj.forEach(p => {
+      const idx = projections.findIndex(x => x.resId==p.resId && x.metric===p.metric && x.year==p.year);
+      if (idx >= 0) projections[idx] = p; else projections.push(p);
+    });
+    await syncData('saveProjections', projections);
+    renderProjTable();
+    fmsg(msgId, `✓ ${newProj.length} proyeksi berhasil diimport!`, 'var(--accent3)');
+  }
+}
+
+// ===== START =====
+init();
+</script>
+</body>
+</html>
