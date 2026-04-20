@@ -404,20 +404,233 @@ function rptGetRecs(type, metric, urgency){
   ];
 }
 
-// ───── Export Word ───────────────────────────────────────────────────
+// ───── Export Word (Multi-Template) ─────────────────────────────────
 function exportReportWord(){
   if(!_rptLastRows.length){ alert('Generate report dulu sebelum export Word.'); return; }
-  if(typeof htmlDocx==='undefined'){ alert('Library Word belum siap, coba lagi.'); return; }
-  fetch('assets/pnm.png')
-    .then(function(r){ return r.blob(); })
+  if(typeof JSZip==='undefined'){ alert('Library Word belum siap, coba lagi.'); return; }
+  var yearMonth = _rptLastYearMonth;
+  var year  = parseInt(document.getElementById('rpt-year').value);
+  var month = parseInt(document.getElementById('rpt-month').value);
+  var label = RPT_MONTHS[month-1]+' '+year;
+  var todayStr = new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+  _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth)
     .then(function(blob){
-      var reader = new FileReader();
-      reader.onloadend = function(){ _buildWordDoc(reader.result); };
-      reader.readAsDataURL(blob);
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'laporan-capacity-planning-'+yearMonth+'.docx';
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(a.href);
     })
-    .catch(function(){ _buildWordDoc(null); });
+    .catch(function(e){ console.error('Export Word error:',e); alert('Gagal export Word: '+e.message); });
 }
 
+function _esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _extractBodyXml(docXml, stripSectPr){
+  var s = docXml.indexOf('<w:body>') + '<w:body>'.length;
+  var e = docXml.lastIndexOf('</w:body>');
+  var body = docXml.substring(s, e);
+  if(stripSectPr){
+    var sp = body.lastIndexOf('<w:sectPr');
+    if(sp >= 0) body = body.substring(0, sp);
+  }
+  return body;
+}
+
+function _extractSectPr(docXml){
+  var s = docXml.lastIndexOf('<w:sectPr');
+  var e = docXml.lastIndexOf('</w:body>');
+  if(s >= 0 && e >= 0 && s < e) return docXml.substring(s, e);
+  return '';
+}
+
+function _fillPlaceholders(xml, data){
+  /* 1. Remove Word spell-check markers */
+  xml = xml.replace(/<w:proofErr[^>]*\/>/g, '');
+  /* 2. Split placeholders: {{</w:t></w:r> [run:name] [run:}}] */
+  xml = xml.replace(
+    /\{\{<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>([^<{}]+)<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>\}\}/g,
+    function(match, key){
+      var val = data[key.trim()];
+      return val !== undefined ? _esc(String(val)) : match;
+    }
+  );
+  /* 3. Intact {{key}} placeholders */
+  xml = xml.replace(/\{\{([^}]+)\}\}/g, function(match, key){
+    var val = data[key.trim()];
+    return val !== undefined ? _esc(String(val)) : match;
+  });
+  return xml;
+}
+
+function _expandWeeklyRows(xml, x, monthEntries){
+  /* find the <w:tr> that contains the weekly placeholder row */
+  var trStart = -1, pos = 0;
+  while(pos < xml.length){
+    var idx = xml.indexOf('<w:tr', pos);
+    if(idx < 0) break;
+    var end = xml.indexOf('</w:tr>', idx);
+    if(end < 0) break;
+    var trXml = xml.substring(idx, end + 7);
+    if(trXml.indexOf('index') >= 0 && trXml.indexOf('period') >= 0){
+      trStart = idx; break;
+    }
+    pos = end + 7;
+  }
+  if(trStart < 0) return xml;
+  var trEnd = xml.indexOf('</w:tr>', trStart) + 7;
+  var tplRow = xml.substring(trStart, trEnd);
+
+  var rows = '';
+  if(monthEntries.length){
+    monthEntries.forEach(function(h, wi){
+      var val = h[x.m] !== '' && h[x.m] != null ? parseFloat(h[x.m]) : null;
+      var abs = val != null && x.cap ? parseFloat(((val/100)*x.cap).toFixed(2))+' '+x.unit : '—';
+      var pct = val != null ? val.toFixed(1)+'%' : '—';
+      var wSt = val==null?'No Data':val>100?'Over Cap':(x.t&&val>x.t?'Kritis':(x.t&&val>x.t*0.85?'Warning':'Normal'));
+      rows += _fillPlaceholders(tplRow, {
+        'index': String(wi+1), 'period': h.label||'—', 'date': h.date,
+        'capacity_used': abs,
+        'capacity_total': x.cap!=null ? x.cap+' '+x.unit : '—',
+        'capacity_utilization': pct, 'status': wSt
+      });
+    });
+  } else {
+    rows = _fillPlaceholders(tplRow, {
+      'index':'—','period':'Tidak ada data','date':'—',
+      'capacity_used':'—','capacity_total':'—','capacity_utilization':'—','status':'—'
+    });
+  }
+  return xml.substring(0, trStart) + rows + xml.substring(trEnd);
+}
+
+function _fillContentSection(contentDocXml, x, idx, yearMonth, label, globalData){
+  var TL  = {cluster:'CLUSTER',storage_core:'STORAGE CORE',storage_support:'STORAGE SUPPORT'};
+  var SL2 = {ok:'Normal',warn:'Warning',danger:'Kritis',over:'Over Cap',na:'No Data'};
+  var gmo     = fmtG(x.growth.monthly);
+  var monthEntries = x.allE.filter(function(h){ return String(h.date).startsWith(yearMonth); });
+  var capStr  = x.cap!=null ? x.cap+' '+x.unit : '—';
+  var actualStr= x.actualAbs!=null ? x.actualAbs+' '+x.unit : '—';
+  var projStr  = x.projMonthAbs!=null ? x.projMonthAbs+' '+x.unit : '—';
+  var projPct  = x.projMonthPct!=null ? x.projMonthPct+'%' : '—';
+  var accStr   = x.accuracy!=null ? x.accuracy.toFixed(1)+'%' : '—';
+  var p90Str   = x.avgUtil!=null ? x.avgUtil.toFixed(1)+'%' : '—';
+  var deltaStr = x.delta!=null ? (x.delta>0?'+':'')+x.delta.toFixed(2)+'%' : '—';
+  var data = {
+    'source_name':             x.r.name,
+    'source_category':         TL[x.r.type]||x.r.type,
+    'metric.name':             x.l,
+    'capacity.total':          capStr,
+    'capacity.used':           actualStr,
+    'capacity.used_pct':       p90Str,
+    'capacity.projection':     projStr,
+    'capacity.projection_pct': projPct,
+    'capacity.accuracy':       accStr,
+    'capacity.growth_current': gmo.t,
+    'capacity.growth_previous':deltaStr,
+    'capacity.p90':            p90Str,
+    'capacity.status':         SL2[x.status]||x.status,
+    'periode_selection':       globalData.periode_selection,
+    'sum_of_source':           globalData.sum_of_source,
+    'average_acurate_source':  globalData.average_acurate_source,
+    'need_to_action':          globalData.need_to_action
+  };
+  /* expand weekly rows first (before global placeholder fill) */
+  var xml = _expandWeeklyRows(contentDocXml, x, monthEntries);
+  /* fill all remaining placeholders */
+  return _fillPlaceholders(xml, data);
+}
+
+function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth){
+  var accRows     = _rptLastRows.filter(function(x){ return x.accuracy!=null; });
+  var avgAcc      = accRows.length ? (accRows.reduce(function(s,x){ return s+x.accuracy; },0)/accRows.length).toFixed(1)+'%' : '—';
+  var urgentCount = _rptLastRows.filter(function(x){ var em=rptEtaMonths(x.eta); return em!==null&&em<=18; }).length;
+  var globalData  = {
+    'periode_selection':      label,
+    'sum_of_source':          String(_rptLastRows.length),
+    'average_acurate_source': avgAcc,
+    'need_to_action':         String(urgentCount)
+  };
+  var PAGE_BREAK = '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';
+
+  return Promise.all([
+    JSZip.loadAsync(TPL_COVER_B64,    {base64:true}),
+    JSZip.loadAsync(TPL_LEMPEN_B64,   {base64:true}),
+    JSZip.loadAsync(TPL_DAFTARISI_B64,{base64:true}),
+    JSZip.loadAsync(TPL_CONTENT_B64,  {base64:true})
+  ]).then(function(zips){
+    /* use content.docx as base — it has the letterhead in default header (header1.xml/rId7) */
+    var contentZip = zips[3];
+    return Promise.all([
+      zips[0].file('word/document.xml').async('text'),
+      zips[1].file('word/document.xml').async('text'),
+      zips[2].file('word/document.xml').async('text'),
+      zips[3].file('word/document.xml').async('text'),
+      contentZip.file('word/header1.xml').async('text')
+    ]).then(function(docs){
+      var coverDoc   = docs[0];
+      var lempenDoc  = docs[1];
+      var daftarDoc  = docs[2];
+      var contentDoc = docs[3];
+      var headerXml  = docs[4];
+
+      /* inject periode_selection into the letterhead header */
+      contentZip.file('word/header1.xml', _fillPlaceholders(headerXml, globalData));
+
+      /* extract each template's body (strip their sectPr) */
+      var coverBody  = _extractBodyXml(_fillPlaceholders(coverDoc,  globalData), true);
+      var lempenBody = _extractBodyXml(_fillPlaceholders(lempenDoc, globalData), true);
+      var daftarBody = _extractBodyXml(_fillPlaceholders(daftarDoc, globalData), true);
+
+      /* use content.docx sectPr (references rId7 = letterhead header) */
+      var masterSect = _extractSectPr(contentDoc);
+
+      /* split content body: ringkasan (once) vs resource detail template (repeats) */
+      var contentBody = _extractBodyXml(contentDoc, true);
+      var ringkasanBody, resourceDetailTpl;
+      var detailIdx = contentBody.indexOf('DETAIL KAPASITAS');
+      if(detailIdx >= 0){
+        var pEnd = contentBody.indexOf('</w:p>', detailIdx);
+        if(pEnd >= 0) pEnd += '</w:p>'.length; else pEnd = detailIdx;
+        ringkasanBody     = _fillPlaceholders(contentBody.substring(0, pEnd), globalData);
+        resourceDetailTpl = contentBody.substring(pEnd);
+      } else {
+        ringkasanBody     = _fillPlaceholders(contentBody, globalData);
+        resourceDetailTpl = '';
+      }
+
+      /* fill resource detail template once per resource */
+      var resourceBodies = _rptLastRows.map(function(x, i){
+        return _fillContentSection(resourceDetailTpl, x, i, yearMonth, label, globalData);
+      });
+
+      /* combine: cover | lempen | daftar | ringkasan+detail×N + sectPr */
+      var combined = coverBody + PAGE_BREAK
+        + lempenBody + PAGE_BREAK
+        + daftarBody + PAGE_BREAK
+        + ringkasanBody
+        + (resourceBodies.length ? PAGE_BREAK + resourceBodies.join(PAGE_BREAK) : '')
+        + masterSect;
+
+      /* write combined body into content.docx (preserves its header/footer refs) */
+      var finalDocXml = contentDoc.replace(
+        /<w:body>[\s\S]*<\/w:body>/,
+        function(){ return '<w:body>' + combined + '</w:body>'; }
+      );
+      contentZip.file('word/document.xml', finalDocXml);
+
+      return contentZip.generateAsync({
+        type:'blob',
+        mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      });
+    });
+  });
+}
+
+/* LEGACY — kept for reference, no longer called */
 function _buildWordDoc(logoSrc){
   var year      = parseInt(document.getElementById('rpt-year')?.value);
   var month     = parseInt(document.getElementById('rpt-month')?.value);
@@ -596,11 +809,9 @@ function _buildWordDoc(logoSrc){
     +'<p style="font-size:10.5pt;margin-bottom:70pt">DIVISI STRATEGI DAN PERENCANAAN TEKNOLOGI INFORMASI</p>'
     +'<p style="font-size:12pt;font-weight:bold;text-align:center">DIVISI STRATEGI DAN PERENCANAAN TEKNOLOGI INFORMASI</p>'
     +'<p style="font-size:12pt;font-weight:bold;text-align:center;margin-bottom:40pt">PT PERMODALAN NASIONAL MADANI</p>'
-    +'<p style="font-size:8pt;color:#666;font-style:italic">Dokumen ini bersifat <em>confidential</em>.<br>Proyeksi dan estimasi dapat berubah sesuai kondisi aktual.</p>'
     +pg()
 
-    /* ── Lembar Pengesahan ── */
-    +lh('2')
+    /* ── Lembar Pengesahan (page 2) ── */
     +sec('LEMBAR PENGESAHAN', false, 1)
     +'<table style="width:100%;border:none;margin-top:24pt">'
       +'<tr>'
@@ -623,27 +834,31 @@ function _buildWordDoc(logoSrc){
         +'<p style="font-size:10pt;margin-top:4pt">Kepala Divisi Strategi dan Perencanaan<br>Teknologi Informasi</p>'
       +'</td></tr>'
     +'</table>'
-    +confidential
     +pg()
 
-    /* ── Disclaimer ── */
-    +lh('3')
-    +sec('DISCLAIMER', true, 1)
-    +'<p style="text-align:justify">Laporan <em>capacity planning</em> ini disusun berdasarkan data historis, analisis tren, dan proyeksi bisnis yang tersedia pada saat penyusunan. Seluruh perhitungan dan proyeksi dalam laporan ini bersifat estimasi dan perkiraan.</p>'
-    +'<p style="margin-top:8pt">Perlu dipahami bahwa:</p>'
-    +'<ul>'
-      +'<li style="text-align:justify">Proyeksi kapasitas didasarkan pada asumsi pertumbuhan dan kondisi bisnis yang dapat berubah sewaktu-waktu.</li>'
-      +'<li style="text-align:justify">Perbedaan antara proyeksi dengan realisasi aktual merupakan hal yang wajar dan tidak dapat sepenuhnya diprediksi.</li>'
-      +'<li style="text-align:justify">Faktor eksternal seperti perubahan strategi bisnis, kondisi pasar, teknologi baru, atau kejadian tak terduga dapat mempengaruhi akurasi proyeksi.</li>'
-      +'<li style="text-align:justify">Rekomendasi dan estimasi biaya dapat berubah sesuai kondisi pasar dan ketersediaan vendor.</li>'
-      +'<li style="text-align:justify"><em>Monitoring</em> dan <em>review</em> berkala sangat penting untuk menyesuaikan perencanaan dengan kondisi aktual.</li>'
-    +'</ul>'
-    +'<p style="text-align:justify">Laporan ini harus digunakan sebagai panduan perencanaan dan bukan sebagai jaminan absolut. Evaluasi dan <em>adjustment</em> berkelanjutan sangat disarankan.</p>'
-    +confidential
+    /* ── Daftar Isi (page 3) ── */
+    +sec('DAFTAR ISI', false, 1)
+    +(function(){
+      var tocEntries = [
+        {label:'Lembar Pengesahan', page:'2'},
+        {label:'Daftar Isi', page:'3'},
+        {label:'Laporan Bulanan \u2014 '+label, page:'4'},
+        {label:'\u00a0\u00a0\u00a0Ringkasan Eksekutif', page:'4'},
+        {label:'\u00a0\u00a0\u00a0Detail Kapasitas &amp; Breakdown Mingguan', page:'5'}
+      ];
+      var rows = tocEntries.map(function(e){
+        return '<tr>'
+          +'<td style="padding:5pt 4pt;border:none;font-size:10pt">'+e.label+'</td>'
+          +'<td style="padding:5pt 4pt;border:none;font-size:10pt;text-align:right;white-space:nowrap;color:#555">'
+            +'<span style="letter-spacing:2pt">.................</span>&nbsp;'+e.page
+          +'</td>'
+        +'</tr>';
+      });
+      return '<table style="width:100%;border:none;border-collapse:collapse;margin-top:8pt">'+rows.join('')+'</table>';
+    })()
     +pg()
 
     /* ── Laporan Bulanan ── */
-    +lh('4','DOKUMEN LAPORAN CAPACITY PLANNING')
     +'<p style="color:'+C_BLUE+';font-size:13pt;font-weight:bold;margin-bottom:3pt">LAPORAN BULANAN \u2014 '+label.toUpperCase()+'</p>'
     +'<p style="font-size:9pt;color:#555;margin-bottom:14pt">Periode: '+label+' | Tahun: '+year+'</p>'
 
@@ -664,19 +879,114 @@ function _buildWordDoc(logoSrc){
 
     +sec('DETAIL KAPASITAS &amp; BREAKDOWN MINGGUAN PER RESOURCE', false, 2)
     +'<p style="font-size:9pt;color:#555;margin-bottom:10pt">Setiap resource menampilkan informasi lengkap: total kapasitas, realisasi pemakaian, proyeksi, akurasi proyeksi, pertumbuhan bulan ini &amp; bulan lalu, P90 utilisasi \u2014 diikuti detail pemakaian per minggu.</p>'
-    +resHtml
-    +confidential;
+    +resHtml;
 
   var full = '<!DOCTYPE html><html><head><meta charset="UTF-8">'+css+'</head><body>'+body+'</body></html>';
-  /* A4 standard margins: 2.54cm top/bottom = 1440 twip, 2.5cm left/right = 1418 twip */
-  var blob = htmlDocx.asBlob(full, {orientation:'portrait', margins:{top:1440,right:1418,bottom:1440,left:1418}});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'laporan-capacity-planning-'+yearMonth+'.docx';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(a.href);
+  /* top margin increased to 3000 twip (~5.3cm) to accommodate the Word header */
+  return htmlDocx.asBlob(full, {orientation:'portrait', margins:{top:3000,right:1418,bottom:1440,left:1418}});
+}
+
+// ───── Word Header/Footer Injection (dari template) ──────────────────
+function _injectWordHeader(blob, logoSrc){
+  var year     = parseInt(document.getElementById('rpt-year')?.value);
+  var month    = parseInt(document.getElementById('rpt-month')?.value);
+  var label    = RPT_MONTHS[month-1]+' '+year;
+  var todayStr = new Date().toLocaleDateString('id-ID',{day:'numeric',month:'long',year:'numeric'});
+  /* Load generated DOCX + embedded template in parallel */
+  return Promise.all([
+    JSZip.loadAsync(blob),
+    JSZip.loadAsync(WORD_TEMPLATE_B64, {base64: true})
+  ]).then(function(zips){
+    var genZip = zips[0], tplZip = zips[1];
+
+    /* Read all needed parts from template */
+    return Promise.all([
+      tplZip.file('word/header1.xml').async('text'),
+      tplZip.file('word/footer1.xml').async('text'),
+      tplZip.file('word/footer2.xml').async('text'),
+      tplZip.file('word/media/image2.png').async('uint8array'),
+      tplZip.file('word/_rels/header1.xml.rels').async('text')
+    ]).then(function(parts){
+      var hdrXml     = parts[0];
+      var ftrXml     = parts[1];
+      var ftrFirstXml= parts[2];
+      var logoBytes  = parts[3];
+      var hdrRels    = parts[4];
+
+      /* ── Substitute dynamic values in header1.xml ── */
+      /* 1. Period label */
+      hdrXml = hdrXml.replace(/PERIODE\s+\w+ \d{4}/g, 'PERIODE '+label.toUpperCase());
+      /* 2. Date — replace "9</w:t>...<w:t...>April 2026" with current date in single run */
+      hdrXml = hdrXml.replace(/>:\s+\d+<\/w:t>[\s\S]*?>(?:\w+ )?\d{4}<\/w:t>/,
+        '>:  '+todayStr+'</w:t>');
+
+      /* ── Inject files into generated DOCX ── */
+      var emptyRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        +'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>';
+
+      genZip.file('word/header1.xml', hdrXml);
+      genZip.file('word/footer1.xml', ftrXml);
+      genZip.file('word/footer2.xml', ftrFirstXml);
+      genZip.file('word/media/image2.png', logoBytes);
+      genZip.file('word/_rels/header1.xml.rels', hdrRels);
+      genZip.file('word/_rels/footer1.xml.rels', emptyRels);
+      genZip.file('word/_rels/footer2.xml.rels', emptyRels);
+
+      /* ── Update [Content_Types].xml ── */
+      return genZip.file('[Content_Types].xml').async('text').then(function(ct){
+        if(ct.indexOf('Extension="png"')<0){
+          ct = ct.replace('</Types>','<Default Extension="png" ContentType="image/png"/></Types>');
+        }
+        if(ct.indexOf('header1.xml')<0){
+          ct = ct.replace('</Types>',
+            '<Override PartName="/word/header1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'
+            +'<Override PartName="/word/footer1.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+            +'<Override PartName="/word/footer2.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml"/>'
+            +'</Types>');
+        }
+        genZip.file('[Content_Types].xml', ct);
+        return genZip.file('word/_rels/document.xml.rels').async('text');
+
+      }).then(function(docRels){
+        var maxId = 0;
+        (docRels.match(/Id="rId(\d+)"/g)||[]).forEach(function(m){
+          var n=parseInt(m.match(/\d+/)[0]); if(n>maxId) maxId=n;
+        });
+        var ridH1='rId'+(maxId+1), ridF1='rId'+(maxId+2), ridF2='rId'+(maxId+3);
+        docRels = docRels.replace('</Relationships>',
+          '<Relationship Id="'+ridH1+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="header1.xml"/>'
+          +'<Relationship Id="'+ridF1+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer1.xml"/>'
+          +'<Relationship Id="'+ridF2+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer" Target="footer2.xml"/>'
+          +'</Relationships>');
+        genZip.file('word/_rels/document.xml.rels', docRels);
+        return genZip.file('word/document.xml').async('text').then(function(d){
+          return {d:d, ridH1:ridH1, ridF1:ridF1, ridF2:ridF2};
+        });
+
+      }).then(function(o){
+        var docXml = o.d;
+        /* No titlePg: header1 is default, no "first" header → cover page also gets the header.
+           Footer: default + first (footer2 = same confidential text on all pages) */
+        var refs = '<w:headerReference w:type="default" r:id="'+o.ridH1+'"/>'
+          +'<w:footerReference w:type="default" r:id="'+o.ridF1+'"/>'
+          +'<w:footerReference w:type="first" r:id="'+o.ridF2+'"/>'
+          +'<w:titlePg/>';
+        if(docXml.indexOf('<w:sectPr')>=0){
+          docXml = docXml.replace(/<w:sectPr(\s[^>]*)?>/, function(m){ return m+refs; });
+        } else {
+          docXml = docXml.replace('</w:body>','<w:sectPr>'+refs+'</w:sectPr></w:body>');
+        }
+        genZip.file('word/document.xml', docXml);
+        return genZip.generateAsync({
+          type:'blob',
+          mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        });
+      });
+    });
+  }).catch(function(e){
+    console.warn('Template inject failed, returning plain DOCX:', e);
+    return blob;
+  });
 }
 
 // ───── Export Excel ──────────────────────────────────────────────────
