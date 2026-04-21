@@ -448,9 +448,22 @@ function _extractSectPr(docXml){
 }
 
 function _fillPlaceholders(xml, data){
-  /* 1. Remove Word spell-check markers */
+  /* 1. Remove Word spell-check markers and inline bookmarks */
   xml = xml.replace(/<w:proofErr[^>]*\/>/g, '');
-  /* 2. Split placeholders: {{</w:t></w:r> [run:name] [run:}}] */
+  xml = xml.replace(/<w:bookmarkStart[^>]*\/>/g, '');
+  xml = xml.replace(/<w:bookmarkEnd[^>]*\/>/g, '');
+  /* 1b. Also handle non-self-closing bookmark tags */
+  xml = xml.replace(/<w:bookmarkStart[^>]*><\/w:bookmarkStart>/g, '');
+  xml = xml.replace(/<w:bookmarkEnd[^>]*><\/w:bookmarkEnd>/g, '');
+  /* 2. 4-run split: {{ [run:name] [run:}] [run:}] — }} split across two separate runs */
+  xml = xml.replace(
+    /\{\{<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>([^<{}]+)<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>\}<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>\}/g,
+    function(match, key){
+      var val = data[key.trim()];
+      return val !== undefined ? _esc(String(val)) : match;
+    }
+  );
+  /* 3. 3-run split: {{ [run:name] [run:}}] */
   xml = xml.replace(
     /\{\{<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>([^<{}]+)<\/w:t><\/w:r><w:r[^>]*>(?:<w:rPr>[\s\S]*?<\/w:rPr>)?<w:t[^>]*>\}\}/g,
     function(match, key){
@@ -458,7 +471,7 @@ function _fillPlaceholders(xml, data){
       return val !== undefined ? _esc(String(val)) : match;
     }
   );
-  /* 3. Intact {{key}} placeholders */
+  /* 4. Intact {{key}} placeholders */
   xml = xml.replace(/\{\{([^}]+)\}\}/g, function(match, key){
     var val = data[key.trim()];
     return val !== undefined ? _esc(String(val)) : match;
@@ -466,22 +479,40 @@ function _fillPlaceholders(xml, data){
   return xml;
 }
 
+/* Find the true end of a <w:tr> element, accounting for nested <w:tr> (from nested tables) */
+function _findTrEndDepth(xml, start){
+  var depth = 0, pos = start;
+  while(pos < xml.length){
+    var openA = xml.indexOf('<w:tr ', pos);
+    var openB = xml.indexOf('<w:tr>', pos);
+    var open  = openA < 0 ? openB : (openB < 0 ? openA : Math.min(openA, openB));
+    var close = xml.indexOf('</w:tr>', pos);
+    if(close < 0) return -1;
+    if(open >= 0 && open < close){ depth++; pos = open + 5; }
+    else { depth--; pos = close + 7; if(depth === 0) return pos; }
+  }
+  return -1;
+}
+
 function _expandWeeklyRows(xml, x, monthEntries){
-  /* find the <w:tr> that contains the weekly placeholder row */
+  /* find the <w:tr> that contains ALL weekly placeholders (cols are nested tables within cells) */
   var trStart = -1, pos = 0;
   while(pos < xml.length){
-    var idx = xml.indexOf('<w:tr', pos);
+    var openA = xml.indexOf('<w:tr ', pos);
+    var openB = xml.indexOf('<w:tr>', pos);
+    var idx   = openA < 0 ? openB : (openB < 0 ? openA : Math.min(openA, openB));
     if(idx < 0) break;
-    var end = xml.indexOf('</w:tr>', idx);
+    var end = _findTrEndDepth(xml, idx);
     if(end < 0) break;
-    var trXml = xml.substring(idx, end + 7);
+    var trXml = xml.substring(idx, end);
     if(trXml.indexOf('index') >= 0 && trXml.indexOf('period') >= 0){
       trStart = idx; break;
     }
-    pos = end + 7;
+    pos = end;
   }
   if(trStart < 0) return xml;
-  var trEnd = xml.indexOf('</w:tr>', trStart) + 7;
+  var trEnd = _findTrEndDepth(xml, trStart);
+  if(trEnd < 0) return xml;
   var tplRow = xml.substring(trStart, trEnd);
 
   var rows = '';
@@ -549,7 +580,8 @@ function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth){
   var avgAcc      = accRows.length ? (accRows.reduce(function(s,x){ return s+x.accuracy; },0)/accRows.length).toFixed(1)+'%' : '—';
   var urgentCount = _rptLastRows.filter(function(x){ var em=rptEtaMonths(x.eta); return em!==null&&em<=18; }).length;
   var globalData  = {
-    'periode_selection':      label,
+    'periode_selection':      label.toUpperCase(),
+    'date_generate':          todayStr,
     'sum_of_source':          String(_rptLastRows.length),
     'average_acurate_source': avgAcc,
     'need_to_action':         String(urgentCount)
@@ -562,44 +594,96 @@ function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth){
     JSZip.loadAsync(TPL_DAFTARISI_B64,{base64:true}),
     JSZip.loadAsync(TPL_CONTENT_B64,  {base64:true})
   ]).then(function(zips){
-    /* use content.docx as base — it has the letterhead in default header (header1.xml/rId7) */
+    var coverZip   = zips[0];
     var contentZip = zips[3];
     return Promise.all([
       zips[0].file('word/document.xml').async('text'),
       zips[1].file('word/document.xml').async('text'),
       zips[2].file('word/document.xml').async('text'),
       zips[3].file('word/document.xml').async('text'),
-      contentZip.file('word/header1.xml').async('text')
+      contentZip.file('word/header1.xml').async('text'),
+      contentZip.file('word/_rels/document.xml.rels').async('text'),
+      coverZip.file('word/_rels/document.xml.rels').async('text'),
+      contentZip.file('[Content_Types].xml').async('text'),
+      coverZip.file('word/header2.xml').async('text')
     ]).then(function(docs){
-      var coverDoc   = docs[0];
-      var lempenDoc  = docs[1];
-      var daftarDoc  = docs[2];
-      var contentDoc = docs[3];
-      var headerXml  = docs[4];
+      var coverDoc    = docs[0];
+      var lempenDoc   = docs[1];
+      var daftarDoc   = docs[2];
+      var contentDoc  = docs[3];
+      var headerXml   = docs[4];
+      var contentRels = docs[5];
+      var coverRels   = docs[6];
+      var contentTypes= docs[7];
+      var emptyHdrXml = docs[8];   /* cover.docx header2.xml — already an empty header */
 
-      /* inject periode_selection into the letterhead header */
+      /* inject periode_selection + date into the letterhead header */
       contentZip.file('word/header1.xml', _fillPlaceholders(headerXml, globalData));
 
-      /* extract each template's body (strip their sectPr) */
-      var coverBody  = _extractBodyXml(_fillPlaceholders(coverDoc,  globalData), true);
+      /* use cover's actual empty header (avoids namespace declaration issues) */
+      contentZip.file('word/headerCover.xml', emptyHdrXml);
+
+      /* register headerCover.xml and image rId in content's rels */
+      var updatedRels = contentRels.replace('</Relationships>',
+        '<Relationship Id="rIdCoverImg" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/image1.png"/>'
+        + '<Relationship Id="rIdCoverHdr" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/header" Target="headerCover.xml"/>'
+        + '</Relationships>');
+      contentZip.file('word/_rels/document.xml.rels', updatedRels);
+
+      /* register headerCover.xml content type */
+      var updatedTypes = contentTypes.replace('</Types>',
+        '<Override PartName="/word/headerCover.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>'
+        + '</Types>');
+      contentZip.file('[Content_Types].xml', updatedTypes);
+
+      /* find which rId cover uses for its embedded image */
+      var coverImgMatch = coverRels.match(/Id="(rId\d+)"[^>]*Target="media\/[^"]+\.(?:png|jpg|jpeg|gif|emf|wmf)"/i);
+      var coverImgRId   = coverImgMatch ? coverImgMatch[1] : 'rId7';
+
+      /* extract and fill cover body; remap cover's image rId to rIdCoverImg */
+      var rawCoverBody = _extractBodyXml(_fillPlaceholders(coverDoc, globalData), true);
+      var coverBody = rawCoverBody
+        .replace(new RegExp('r:embed="' + coverImgRId + '"', 'g'), 'r:embed="rIdCoverImg"')
+        .replace(new RegExp('r:id="'    + coverImgRId + '"', 'g'), 'r:id="rIdCoverImg"');
+
       var lempenBody = _extractBodyXml(_fillPlaceholders(lempenDoc, globalData), true);
       var daftarBody = _extractBodyXml(_fillPlaceholders(daftarDoc, globalData), true);
 
-      /* use content.docx sectPr (references rId7 = letterhead header) */
+      /* use content.docx sectPr as master (has rId7 = letterhead header) */
       var masterSect = _extractSectPr(contentDoc);
 
-      /* split content body: ringkasan (once) vs resource detail template (repeats) */
+      /* build cover-section sectPr: no header, same page size/margins as content.
+         In OOXML, intermediate sectPr MUST be inside <w:p><w:pPr>…</w:pPr></w:p> */
+      var pgSzMatch  = masterSect.match(/<w:pgSz\b[^>]*\/>/);
+      var pgMarMatch = masterSect.match(/<w:pgMar\b[^>]*\/>/);
+      var coverSectPr = '<w:p><w:pPr><w:sectPr>'
+        + '<w:headerReference w:type="default" r:id="rIdCoverHdr"/>'
+        + '<w:headerReference w:type="first"   r:id="rIdCoverHdr"/>'
+        + '<w:headerReference w:type="even"    r:id="rIdCoverHdr"/>'
+        + '<w:type w:val="nextPage"/>'
+        + (pgSzMatch  ? pgSzMatch[0]  : '')
+        + (pgMarMatch ? pgMarMatch[0] : '')
+        + '</w:sectPr></w:pPr></w:p>';
+
+      /* split content body: ringkasan+description (once) | resource section (repeats per resource)
+         source_name is split across runs by Word spellcheck, so search for 'source_name' text.
+         Split point: start of the <w:p> that contains 'source_name' */
       var contentBody = _extractBodyXml(contentDoc, true);
       var ringkasanBody, resourceDetailTpl;
-      var detailIdx = contentBody.indexOf('DETAIL KAPASITAS');
-      if(detailIdx >= 0){
-        var pEnd = contentBody.indexOf('</w:p>', detailIdx);
-        if(pEnd >= 0) pEnd += '</w:p>'.length; else pEnd = detailIdx;
-        ringkasanBody     = _fillPlaceholders(contentBody.substring(0, pEnd), globalData);
-        resourceDetailTpl = contentBody.substring(pEnd);
+      var snPos = contentBody.indexOf('source_name');
+      if(snPos >= 0){
+        /* walk back to find the opening <w:p that encloses source_name */
+        var pA = contentBody.lastIndexOf('<w:p ', snPos);
+        var pB = contentBody.lastIndexOf('<w:p>', snPos);
+        var splitAt = Math.max(pA, pB);
+        if(splitAt < 0) splitAt = snPos;
+        ringkasanBody     = _fillPlaceholders(contentBody.substring(0, splitAt), globalData);
+        resourceDetailTpl = contentBody.substring(splitAt);
       } else {
-        ringkasanBody     = _fillPlaceholders(contentBody, globalData);
-        resourceDetailTpl = '';
+        var detailIdx = contentBody.indexOf('DETAIL KAPASITAS');
+        var splitAt2  = detailIdx >= 0 ? contentBody.indexOf('</w:p>', detailIdx) + 6 : 0;
+        ringkasanBody     = _fillPlaceholders(contentBody.substring(0, splitAt2), globalData);
+        resourceDetailTpl = contentBody.substring(splitAt2);
       }
 
       /* fill resource detail template once per resource */
@@ -607,19 +691,29 @@ function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth){
         return _fillContentSection(resourceDetailTpl, x, i, yearMonth, label, globalData);
       });
 
-      /* combine: cover | lempen | daftar | ringkasan+detail×N + sectPr */
-      var combined = coverBody + PAGE_BREAK
+      /* combine: cover(no-header sectPr) | lempen | daftar | ringkasan | detail×N | masterSectPr */
+      var combined = coverBody + coverSectPr
         + lempenBody + PAGE_BREAK
         + daftarBody + PAGE_BREAK
         + ringkasanBody
         + (resourceBodies.length ? PAGE_BREAK + resourceBodies.join(PAGE_BREAK) : '')
         + masterSect;
 
-      /* write combined body into content.docx (preserves its header/footer refs) */
-      var finalDocXml = contentDoc.replace(
-        /<w:body>[\s\S]*<\/w:body>/,
-        function(){ return '<w:body>' + combined + '</w:body>'; }
-      );
+      /* inject missing namespace declarations used by cover body (DrawingML a:, pic:)
+         that content.docx root element doesn't already declare */
+      var docXml = contentDoc;
+      if(docXml.indexOf('xmlns:a=') < 0){
+        docXml = docXml.replace('<w:document ',
+          '<w:document'
+          + ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+          + ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"'
+          + ' ');
+      }
+
+      /* replace body using string methods (more reliable than regex on large strings) */
+      var bStart = docXml.indexOf('<w:body>') + '<w:body>'.length;
+      var bEnd   = docXml.lastIndexOf('</w:body>');
+      var finalDocXml = docXml.substring(0, bStart) + combined + docXml.substring(bEnd);
       contentZip.file('word/document.xml', finalDocXml);
 
       return contentZip.generateAsync({
