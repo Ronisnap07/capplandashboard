@@ -417,7 +417,9 @@ function exportReportWord(){
     .then(function(blob){
       var a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = 'laporan-capacity-planning-'+yearMonth+'.docx';
+      var _mo=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+      var _ym=yearMonth.split('-'); var _fn='Laporan_Monitoring_Capplan_'+(_mo[parseInt(_ym[1],10)-1]||_ym[1])+'_'+_ym[0];
+      a.download = _fn+'.docx';
       document.body.appendChild(a); a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(a.href);
@@ -445,6 +447,15 @@ function _extractSectPr(docXml){
   var e = docXml.lastIndexOf('</w:body>');
   if(s >= 0 && e >= 0 && s < e) return docXml.substring(s, e);
   return '';
+}
+
+function _fmtDateShort(dateStr){
+  if(!dateStr) return '—';
+  var d = new Date(dateStr);
+  if(isNaN(d)) return String(dateStr);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var dd = String(d.getUTCDate()).padStart(2,'0');
+  return dd+' '+months[d.getUTCMonth()]+' '+d.getUTCFullYear();
 }
 
 function _fillPlaceholders(xml, data){
@@ -523,7 +534,7 @@ function _expandWeeklyRows(xml, x, monthEntries){
       var pct = val != null ? val.toFixed(1)+'%' : '—';
       var wSt = val==null?'No Data':val>100?'Over Cap':(x.t&&val>x.t?'Kritis':(x.t&&val>x.t*0.85?'Warning':'Normal'));
       rows += _fillPlaceholders(tplRow, {
-        'index': String(wi+1), 'period': h.label||'—', 'date': h.date,
+        'index': String(wi+1), 'period': h.label||'—', 'date': _fmtDateShort(h.date),
         'capacity_used': abs,
         'capacity_total': x.cap!=null ? x.cap+' '+x.unit : '—',
         'capacity_utilization': pct, 'status': wSt
@@ -551,7 +562,7 @@ function _fillContentSection(contentDocXml, x, idx, yearMonth, label, globalData
   var p90Str   = x.avgUtil!=null ? x.avgUtil.toFixed(1)+'%' : '—';
   var deltaStr = x.delta!=null ? (x.delta>0?'+':'')+x.delta.toFixed(2)+'%' : '—';
   var data = {
-    'source_name':             x.r.name,
+    'source_name':             x.r.name+' \u2013 Metrik : '+x.l,
     'source_category':         TL[x.r.type]||x.r.type,
     'metric.name':             x.l,
     'capacity.total':          capStr,
@@ -569,8 +580,18 @@ function _fillContentSection(contentDocXml, x, idx, yearMonth, label, globalData
     'average_acurate_source':  globalData.average_acurate_source,
     'need_to_action':          globalData.need_to_action
   };
+  /* Remove the source_category/metric.name subtitle paragraph from template */
+  var xml = contentDocXml;
+  var scPos = xml.indexOf('source_category');
+  if(scPos >= 0){
+    var scPA = xml.lastIndexOf('<w:p ', scPos);
+    var scPB = xml.lastIndexOf('<w:p>', scPos);
+    var scPS = Math.max(scPA, scPB);
+    var scPE = xml.indexOf('</w:p>', scPos) + 6;
+    if(scPS >= 0 && scPE > scPS) xml = xml.substring(0, scPS) + xml.substring(scPE);
+  }
   /* expand weekly rows first (before global placeholder fill) */
-  var xml = _expandWeeklyRows(contentDocXml, x, monthEntries);
+  xml = _expandWeeklyRows(xml, x, monthEntries);
   /* fill all remaining placeholders */
   return _fillPlaceholders(xml, data);
 }
