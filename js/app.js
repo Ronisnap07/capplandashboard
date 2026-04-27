@@ -87,6 +87,7 @@ function buildConfigPage(){
       <button class="cpg-btn"        data-ctab="c-projection" onclick="showConfigTab('c-projection')">Proyeksi Tahunan</button>
       <button class="cpg-btn"        data-ctab="c-threshold"  onclick="showConfigTab('c-threshold')">Threshold</button>
       <button class="cpg-btn"        data-ctab="c-report"     onclick="showConfigTab('c-report')">📊 Report Bulanan</button>
+      <button class="cpg-btn"        data-ctab="c-report-quarterly" onclick="showConfigTab('c-report-quarterly')">📊 Report 3 Bulanan</button>
     </nav>
 
     <!-- Resources -->
@@ -240,6 +241,9 @@ function buildConfigPage(){
     <!-- Report Bulanan -->
     <div id="cfg-c-report" class="cpg-view">
       <div id="report-content"></div>
+    </div>
+    <div id="cfg-c-report-quarterly" class="cpg-view">
+      <div id="report-content-quarterly"></div>
     </div>`;
 
   currentConfigTab = 'c-resources';
@@ -268,6 +272,7 @@ function renderCurrentConfigTab(){
   else if(currentConfigTab==='c-projection') renderProjUI();
   else if(currentConfigTab==='c-threshold')  renderThresholds();
   else if(currentConfigTab==='c-report')     renderReport();
+  else if(currentConfigTab==='c-report-quarterly') renderReportQuarterly();
 }
 
 // ===== VIEWER / EDITOR NAV =====

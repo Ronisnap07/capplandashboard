@@ -553,7 +553,9 @@ function _fillContentSection(contentDocXml, x, idx, yearMonth, label, globalData
   var TL  = {cluster:'CLUSTER',storage_core:'STORAGE CORE',storage_support:'STORAGE SUPPORT'};
   var SL2 = {ok:'Normal',warn:'Warning',danger:'Kritis',over:'Over Cap',na:'No Data'};
   var gmo     = fmtG(x.growth.monthly);
-  var monthEntries = x.allE.filter(function(h){ return String(h.date).startsWith(yearMonth); });
+  var monthEntries = Array.isArray(yearMonth)
+    ? x.allE.filter(function(h){ var d=String(h.date); return yearMonth.some(function(ym){ return d.startsWith(ym); }); })
+    : x.allE.filter(function(h){ return String(h.date).startsWith(yearMonth); });
   var capStr  = x.cap!=null ? x.cap+' '+x.unit : '—';
   var actualStr= x.actualAbs!=null ? x.actualAbs+' '+x.unit : '—';
   var projStr  = x.projMonthAbs!=null ? x.projMonthAbs+' '+x.unit : '—';
@@ -596,10 +598,12 @@ function _fillContentSection(contentDocXml, x, idx, yearMonth, label, globalData
   return _fillPlaceholders(xml, data);
 }
 
-function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth){
-  var accRows     = _rptLastRows.filter(function(x){ return x.accuracy!=null; });
+function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth, rows, yearMonths){
+  rows       = rows       || _rptLastRows;
+  yearMonths = yearMonths || [yearMonth];
+  var accRows     = rows.filter(function(x){ return x.accuracy!=null; });
   var avgAcc      = accRows.length ? (accRows.reduce(function(s,x){ return s+x.accuracy; },0)/accRows.length).toFixed(1)+'%' : '—';
-  var urgentCount = _rptLastRows.filter(function(x){ var em=rptEtaMonths(x.eta); return em!==null&&em<=18; }).length;
+  var urgentCount = rows.filter(function(x){ var em=rptEtaMonths(x.eta); return em!==null&&em<=18; }).length;
   var globalData  = {
     'periode_selection':      label.toUpperCase(),
     'date_generate':          todayStr,
@@ -708,8 +712,8 @@ function _buildMultiTemplateDoc(year, month, label, todayStr, yearMonth){
       }
 
       /* fill resource detail template once per resource */
-      var resourceBodies = _rptLastRows.map(function(x, i){
-        return _fillContentSection(resourceDetailTpl, x, i, yearMonth, label, globalData);
+      var resourceBodies = rows.map(function(x, i){
+        return _fillContentSection(resourceDetailTpl, x, i, yearMonths, label, globalData);
       });
 
       /* combine: cover(no-header sectPr) | lempen | daftar | ringkasan | detail×N | masterSectPr */
